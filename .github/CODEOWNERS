@@ -1,0 +1,17 @@
+
+# Vaultline CODEOWNERS
+# P1 + Team Lead
+/backend/paypal/ @ismayra-devx
+/docs/ @ismayra-devx
+/README.md @ismayra-devx
+/.github/ @ismayra-devx
+
+# P2 — Ankit: Security Backend
+/backend/app/ @ankitkrth1911-arch
+
+# P3 + P4 — Mohd: MCP, Agent and Frontend
+/mcp/ @mohdqrm
+/frontend/ @mohdqrm
+
+# Shared testing: relevant module owner should review changes
+/tests/ @ismayra-devx @ankitkrth1911-arch @mohdqrm

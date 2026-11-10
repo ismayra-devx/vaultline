@@ -93,3 +93,32 @@ def test_fake_adapter_non_completed_statuses():
     )
     assert res_failed["status"] == "FAILED"
 
+def test_real_paypal_mode_fails_closed_when_unavailable(monkeypatch):
+    """When VAULTLINE_USE_REAL_PAYPAL=true, startup MUST fail if adapter cannot be loaded."""
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "true")
+    from backend.main import create_app
+    with pytest.raises(RuntimeError) as exc_info:
+        create_app()
+    assert "Real PayPal mode requested" in str(exc_info.value)
+
+def test_adapter_lifecycle_close_called():
+    """Verify that adapter.close() is safely supported and called during app lifecycle."""
+    from backend.main import create_app
+    closed = []
+
+    class MockAdapter(FakePaypalAdapter):
+        def close(self):
+            closed.append(True)
+
+    mock_adapter = MockAdapter()
+    app = create_app(adapter=mock_adapter)
+
+    import asyncio
+    async def run_lifespan():
+        async with app.router.lifespan_context(app):
+            pass
+
+    asyncio.run(run_lifespan())
+    assert len(closed) == 1
+
+

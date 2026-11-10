@@ -65,9 +65,10 @@ Upon startup, the database is initialized in WAL mode and seeded with safe test 
 
 ---
 
-## Security Invariants
+## Security Invariants & Architecture
 
-Refer to [SECURITY_INVARIANTS.md](SECURITY_INVARIANTS.md) for the 8 core security invariants:
+- **Architecture Baseline**: Refer to [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) for the frozen synchronous contract and system architecture decisions.
+- **Security Invariants**: Refer to [SECURITY_INVARIANTS.md](SECURITY_INVARIANTS.md) for the 8 core security invariants:
 1. Money is `Decimal` / decimal strings only; schemas strictly reject floats.
 2. Identity comes only from credentials (`extra = "forbid"` blocks caller-supplied identity).
 3. Agent credentials and merchant sessions are strictly partitioned.

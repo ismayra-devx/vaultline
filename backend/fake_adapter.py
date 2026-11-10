@@ -102,3 +102,7 @@ class FakePaypalAdapter(PaypalAdapter):
             currency="USD",
             paypal_debug_id=None,
         )
+
+    def close(self) -> None:
+        """No-op cleanup for in-memory test double."""
+        pass

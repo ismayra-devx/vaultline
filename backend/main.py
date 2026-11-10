@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import logging
 import os
 import uuid
@@ -6,6 +7,12 @@ from typing import Optional
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 from backend.config import Config, redact_sensitive_data
 from backend.db import Database
@@ -72,13 +79,23 @@ def create_app(
         paypal_adapter = adapter
     elif os.getenv("VAULTLINE_USE_REAL_PAYPAL", "false").lower() in ("true", "1", "yes"):
         try:
-            try:
-                from backend.paypal.adapter import PayPalSandboxAdapter
-            except ImportError:
-                from backend.paypal import PayPalSandboxAdapter
-            paypal_adapter = PayPalSandboxAdapter.from_env()
+            from backend.paypal.adapter import PayPalSandboxAdapter
         except ImportError:
-            paypal_adapter = FakePaypalAdapter()
+            try:
+                from backend.paypal import PayPalSandboxAdapter
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Real PayPal mode requested (VAULTLINE_USE_REAL_PAYPAL=true), "
+                    "but failed to import PayPalSandboxAdapter from 'backend.paypal.adapter' "
+                    f"or 'backend.paypal': {exc}"
+                ) from exc
+        try:
+            paypal_adapter = PayPalSandboxAdapter.from_env()
+        except Exception as exc:
+            raise RuntimeError(
+                f"Real PayPal mode requested (VAULTLINE_USE_REAL_PAYPAL=true), "
+                f"but PayPalSandboxAdapter.from_env() initialization failed: {exc}"
+            ) from exc
     else:
         paypal_adapter = FakePaypalAdapter()
 
@@ -94,10 +111,22 @@ def create_app(
         config=cfg,
     )
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
+        # Application shutdown: close PayPal adapter and other network resources
+        if hasattr(paypal_adapter, "close"):
+            try:
+                paypal_adapter.close()
+                logger.info("Closed PayPal adapter connection.")
+            except Exception as exc:
+                logger.warning("Error closing PayPal adapter: %s", exc)
+
     app = FastAPI(
         title="Vaultline Security Gateway",
         description="Authorization gateway between autonomous AI agents and PayPal.",
         version="1.0.0",
+        lifespan=lifespan,
     )
 
     # Attach shared singletons to app state

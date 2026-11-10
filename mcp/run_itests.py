@@ -1,28 +1,36 @@
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import httpx
 
+
 def main():
+    agent_key = os.getenv("VAULTLINE_TEST_AGENT_KEY") or os.getenv("VAULTLINE_AGENT_KEY")
+    if not agent_key or not agent_key.strip():
+        print(
+            "ERROR: VAULTLINE_TEST_AGENT_KEY or VAULTLINE_AGENT_KEY must be explicitly set in the environment.\n"
+            "Silent default key fallback is disabled for security and consistency.",
+            file=sys.stderr,
+        )
+        return 1
+    agent_key = agent_key.strip()
+
     port = int(os.getenv("VAULTLINE_TEST_PORT", "8008"))
-    base_url = os.getenv("VAULTLINE_TEST_API_BASE_URL", f"http://127.0.0.1:{port}")
-    agent_key = os.getenv("VAULTLINE_TEST_AGENT_KEY") or os.getenv("VAULTLINE_AGENT_KEY", "vl_agent_secret_key_abc123")
+    base_url = f"http://127.0.0.1:{port}"
+
+    # Use an isolated temporary directory for the test database to avoid deleting or colliding with existing databases
+    test_db_dir = tempfile.mkdtemp(prefix="vaultline_itest_")
+    db_path = os.path.join(test_db_dir, "test.db")
 
     backend_env = os.environ.copy()
     backend_env["VAULTLINE_USE_REAL_PAYPAL"] = "false"
     backend_env["VAULTLINE_AGENT_KEY"] = agent_key
-    backend_env["VAULTLINE_DB_PATH"] = os.getenv("VAULTLINE_DB_PATH", "vaultline_itest.db")
+    backend_env["VAULTLINE_DB_PATH"] = db_path
 
-    # Clean previous itest db if present
-    for fname in ["vaultline_itest.db", "vaultline_itest.db-wal", "vaultline_itest.db-shm"]:
-        if os.path.exists(fname):
-            try:
-                os.remove(fname)
-            except OSError:
-                pass
-
-    print(f"Starting Vaultline FastAPI backend on {base_url}...")
+    print(f"Starting Vaultline FastAPI backend on {base_url} (isolated db: {db_path})...")
     server_proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "backend.main:app", "--port", str(port), "--host", "127.0.0.1"],
         env=backend_env,
@@ -44,12 +52,12 @@ def main():
             time.sleep(0.3)
 
         if not healthy:
-            print("ERROR: FastAPI backend failed to start.")
+            print("ERROR: FastAPI backend failed to start.", file=sys.stderr)
             server_proc.kill()
             out, err = server_proc.communicate()
-            print("STDOUT:", out.decode(errors="replace"))
-            print("STDERR:", err.decode(errors="replace"))
-            sys.exit(1)
+            print("STDOUT:", out.decode(errors="replace"), file=sys.stderr)
+            print("STDERR:", err.decode(errors="replace"), file=sys.stderr)
+            return 1
 
         print(f"FastAPI backend healthy at {base_url}/health. Running MCP integration tests...")
 
@@ -76,13 +84,13 @@ def main():
             server_proc.kill()
         print("Backend server stopped.")
 
-        for fname in ["vaultline_itest.db", "vaultline_itest.db-wal", "vaultline_itest.db-shm"]:
-            if os.path.exists(fname):
-                try:
-                    os.remove(fname)
-                except OSError:
-                    pass
+        # Clean up isolated test database directory
+        if os.path.exists(test_db_dir):
+            try:
+                shutil.rmtree(test_db_dir, ignore_errors=True)
+            except Exception:
+                pass
+
 
 if __name__ == "__main__":
     sys.exit(main())
-

@@ -13,6 +13,10 @@ from backend.services import VaultlineService
 from backend.routes_agent import router as agent_router
 from backend.routes_merchant import router as merchant_router
 from backend.routes_v1 import router as v1_router
+from backend.routes_sandbox import router as sandbox_router
+from backend.hosted import allowed_origins, enforce_hosted_config, is_hosted
+from backend.paypal import build_adapter_from_env
+from backend.paypal import register_captures_from_env
 
 # Configure logging to redact secrets
 class SecretRedactingFormatter(logging.Formatter):
@@ -62,15 +66,28 @@ def create_app(
     service: Optional[VaultlineService] = None,
 ) -> FastAPI:
     cfg = config or Config()
+    hosted = is_hosted()
+    if hosted:
+        # Fail closed before touching the database: no fake adapter, no public default secrets.
+        enforce_hosted_config(cfg)
+
+    # Explicit adapter (tests) > env-selected PayPal Sandbox adapter > fake adapter (local dev).
+    paypal_adapter = adapter or build_adapter_from_env() or FakePaypalAdapter()
+    is_fake = isinstance(paypal_adapter, FakePaypalAdapter)
+
     database = db or Database(cfg.db_path)
     database.init_schema()
-    database.seed_defaults(cfg)
+    database.seed_defaults(cfg, seed_demo_captures=is_fake)
+    if hosted:
+        database.rotate_seeded_credentials(cfg)
 
-    paypal_adapter = adapter or FakePaypalAdapter()
-    # Seed default captures into fake adapter
-    paypal_adapter.seed_capture("CAP_A", Decimal("300.00"), "USD", "COMPLETED")
-    paypal_adapter.seed_capture("CAP_B", Decimal("300.00"), "USD", "COMPLETED")
-    paypal_adapter.seed_capture("CAP_C", Decimal("300.00"), "USD", "COMPLETED")
+    if is_fake:
+        # Seed default captures into fake adapter
+        paypal_adapter.seed_capture("CAP_A", Decimal("300.00"), "USD", "COMPLETED")
+        paypal_adapter.seed_capture("CAP_B", Decimal("300.00"), "USD", "COMPLETED")
+        paypal_adapter.seed_capture("CAP_C", Decimal("300.00"), "USD", "COMPLETED")
+    else:
+        register_captures_from_env(database.get_connection(), paypal_adapter, cfg.merchant_id)
 
     vaultline_service = service or VaultlineService(
         db=database,
@@ -92,6 +109,16 @@ def create_app(
 
     # Middleware
     app.add_middleware(PureASGICorrelationMiddleware)
+    origins = allowed_origins()
+    if origins:
+        from fastapi.middleware.cors import CORSMiddleware
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=False,  # merchant sessions use explicit tokens, not cookies
+            allow_methods=["GET", "POST"],
+            allow_headers=["Authorization", "Content-Type", "X-Session-Token"],
+        )
 
     # Health check
     @app.get("/health", tags=["Health"])
@@ -102,6 +129,7 @@ def create_app(
     app.include_router(agent_router)
     app.include_router(merchant_router)
     app.include_router(v1_router)
+    app.include_router(sandbox_router)
 
     return app
 

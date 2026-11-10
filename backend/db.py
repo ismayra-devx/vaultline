@@ -161,7 +161,7 @@ class Database:
         except sqlite3.OperationalError:
             pass
 
-    def seed_defaults(self, config: Config) -> None:
+    def seed_defaults(self, config: Config, seed_demo_captures: bool = True) -> None:
         conn = self.get_connection()
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -218,7 +218,8 @@ class Database:
             ("CAP_B", "300.00"),
             ("CAP_C", "300.00"),
         ]
-        for cap_id, orig_amt in captures_to_seed:
+        # Demo captures only exist in the fake adapter; real sandbox captures are registered explicitly.
+        for cap_id, orig_amt in (captures_to_seed if seed_demo_captures else []):
             conn.execute(
                 """
                 INSERT OR IGNORE INTO captures (id, merchant_id, original_amount, currency, refunded_amount, status, created_at)
@@ -226,6 +227,24 @@ class Database:
                 """,
                 (cap_id, config.merchant_id, orig_amt, "USD", "0.00", "COMPLETED", now_iso),
             )
+
+    def rotate_seeded_credentials(self, config: Config) -> None:
+        """Hosted mode: make the seeded agent key / judge password match the current env.
+
+        seed_defaults uses INSERT OR IGNORE, so without this a persisted database would keep
+        whatever credentials it was first created with (e.g. the public demo defaults).
+        """
+        from backend.auth import hash_password
+        conn = self.get_connection()
+        conn.execute(
+            "UPDATE agents SET api_key_hash = ? WHERE id = ?",
+            (hashlib.sha256(config.agent_key.encode("utf-8")).hexdigest(), config.agent_id),
+        )
+        conn.execute(
+            "UPDATE merchant_users SET password_hash = ? WHERE merchant_id = ? AND username = ?",
+            (hash_password(config.judge_password), config.merchant_id, config.judge_username),
+        )
+        conn.commit()
 
     def close(self) -> None:
         if hasattr(self._local, "conn") and self._local.conn is not None:

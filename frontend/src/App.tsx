@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { api, hasSession, USING_FIXTURES } from './api/client';
-import { BrandMark, Loading } from './components/ui';
+import { BrandMark, Loading, SilkBackground } from './components/ui';
 import { DataProvider, useData } from './lib/data';
 import { ActivityPage, AnalystPanel, ApprovalsPage, LoginPage, RequestsPage } from './pages/pages';
 
@@ -22,6 +22,7 @@ export default function App() {
   // Route guards are UX only — every merchant route is enforced by the backend.
   return (
     <>
+      <SilkBackground />
       {!signedIn ? (
         <LoginPage onDone={() => setSignedIn(true)} />
       ) : (
@@ -64,7 +65,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
     <div className="app">
       {USING_FIXTURES && <div className="fixture-banner" role="alert">DEMO FIXTURES — not live backend data. Unset VITE_DEMO_FIXTURES for the real build.</div>}
       <header className={`topbar ${fresh ? 'fresh' : ''}`}>
-        <div className="brand"><BrandMark />Vaultline<span className="tag">Every agent has a limit.</span></div>
+        <div className="brand"><BrandMark /><span className="brand-name">Vaultline</span><span className="tag">Every agent has a limit.</span></div>
         <nav aria-label="Main">
           {ROUTES.map((r) => (
             <a key={r.id} href={`#/${r.id}`} className={route === r.id ? 'on' : ''} aria-current={route === r.id ? 'page' : undefined}>
@@ -74,14 +75,14 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         </nav>
         <div className="who">
           <span className={`live ${live ? 'on' : ''}`} title={live ? 'Polling backend every 2s' : 'Backend unreachable'} role="status">{live ? 'Live' : 'Reconnecting'}</span>
-          <button className="btn btn-ghost" onClick={() => setAnalyst((v) => !v)} aria-expanded={analyst}>Analyst</button>
-          <span className="small muted who-name">Merchant</span>
-          <button className="btn btn-ghost" onClick={onLogout}>Sign out</button>
+          <button className="link" onClick={() => setAnalyst((v) => !v)} aria-expanded={analyst}>Analyst</button>
+          <span className="who-name">Merchant</span>
+          <button className="link" onClick={onLogout}>Sign out</button>
         </div>
       </header>
       <div className={`body ${analyst ? 'with-analyst' : ''}`}>
         <main className="content">
-          <h1 className="page-title">{ROUTES.find((r) => r.id === route)!.label}</h1>
+          <h1 className="sr-only">{ROUTES.find((r) => r.id === route)!.label}</h1>
           {route === 'dashboard' && (
             <Suspense fallback={<Loading label="Loading AG Studio…" />}>
               <StudioDashboard />

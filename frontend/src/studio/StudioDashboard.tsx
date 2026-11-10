@@ -2,21 +2,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { AgStudio, AgStudioProvider, createWidgets } from 'ag-studio-react';
 import { studioTheme } from 'ag-studio';
 import { useData } from '../lib/data';
+import { InfoIcon } from '../components/ui';
 import { ApprovalQueueWidget, AuditHealthWidget, DecisionBreakdownWidget } from './widgets';
 
 // AG Studio licence keys are designed to ship in client bundles (not a secret).
 // Without a key Studio runs with a watermark — fine for local dev, set it for the judge build.
 const LICENSE = import.meta.env.VITE_AG_STUDIO_LICENSE_KEY as string | undefined;
 
-// Match Studio's own chrome (edit panels, menus, grids) to the dashboard's light ledger palette.
+// Match Studio's own chrome (edit panels, menus, grids) to the cream + burgundy palette.
 const vaultTheme = studioTheme.withParams({
   browserColorScheme: 'light',
-  backgroundColor: '#ffffff',
-  chromeBackgroundColor: '#f7f3f0',
-  foregroundColor: '#2a1f24',
-  accentColor: '#970747',
-  borderColor: '#ddd0c8',
-  fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
+  backgroundColor: '#F6ECE1',
+  chromeBackgroundColor: '#F3E6D8',
+  foregroundColor: '#3A1A1A',
+  accentColor: '#7A1420',
+  borderColor: 'rgba(110, 15, 26, 0.12)',
+  fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
   studioWrapperBackgroundColor: 'transparent',
   studioWrapperBorder: 'none',
 } as never);
@@ -59,8 +60,9 @@ const initialState = {
       },
       layout: {
         columns: 12, rowHeight: 48, widgetPadding: 0,
-        backgroundColor: 'transparent', widgetBackgroundColor: '#ffffff',
-        widgetBorderEnabled: true, widgetBorderColor: '#ddd0c8', widgetBorderWidth: 1, widgetBorderRadius: 6,
+        // Transparent so each widget's own cream/burgundy card shows through.
+        backgroundColor: 'transparent', widgetBackgroundColor: 'transparent',
+        widgetBorderEnabled: false, widgetBorderRadius: 20,
       },
       widgetLayout: {
         decisions: { xTrack: 0, yTrack: 0, xSpan: 6, ySpan: 7 },
@@ -83,15 +85,20 @@ function useNarrow() {
   return narrow;
 }
 
+const Intro = () => (
+  <p className="intro"><InfoIcon />Live view of every refund your agents attempt. Built on AG Studio; use Edit dashboard to add your own charts.</p>
+);
+
 export function StudioDashboard() {
   const narrow = useNarrow();
   // On phones the Studio canvas and its side panels are too cramped, so the same widgets stack natively.
   if (narrow) {
     return (
       <div className="mobile-stack">
-        <section className="glass panel"><DecisionBreakdownWidget /></section>
-        <section className="glass panel"><ApprovalQueueWidget /></section>
-        <section className="glass panel"><AuditHealthWidget /></section>
+        <Intro />
+        <DecisionBreakdownWidget />
+        <ApprovalQueueWidget />
+        <AuditHealthWidget />
       </div>
     );
   }
@@ -129,8 +136,8 @@ function StudioCanvas() {
   return (
     <AgStudioProvider licenseKey={LICENSE}>
       <div className="studio-bar">
-        <span className="muted small">Live view of every refund your agents attempt. Built on AG Studio; use Edit dashboard to add your own charts.</span>
-        <button className="btn" aria-pressed={mode === 'edit'} onClick={() => setMode((m) => (m === 'view' ? 'edit' : 'view'))}>
+        <Intro />
+        <button className="btn btn-primary btn-pill" aria-pressed={mode === 'edit'} onClick={() => setMode((m) => (m === 'view' ? 'edit' : 'view'))}>
           {mode === 'view' ? 'Edit dashboard' : 'Done editing'}
         </button>
       </div>

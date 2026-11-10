@@ -129,6 +129,23 @@ Requests without a bearer key get **401** before reaching any tool. The MCP serv
 
 ## 7. Run the demo
 
+### Quickest: the demo script (Windows PowerShell, no AI client needed)
+
+`tools/vaultline_demo.ps1` acts as the agent and calls the hosted MCP server:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\vaultline_demo.ps1 -CaptureA <fresh $300 capture> -CaptureB <second capture>
+```
+
+1. Paste the agent key when asked. It stays hidden and is never saved.
+2. The script runs the $250 prompt-injection attempt (BLOCK), a $5 refund (ALLOW, real sandbox refund) and a $20 refund (ESCALATE).
+3. It then prints the `vaultline_admin.py approve ...` command. Run that and enter the judge password.
+4. Run the script again with `-Status` to see the $20 refund COMPLETED with its PayPal refund ID.
+
+Captures are used up by a run, so register fresh ones before each demo (section 5). If you're using another deployment, add `-McpUrl https://<mcp>/mcp -ApiUrl https://<api>`.
+
+### With an AI agent
+
 Ask the agent, using your registered capture IDs:
 
 | Prompt | Expected |
@@ -148,6 +165,10 @@ Then ask the agent for the status. It should show COMPLETED with a refund ID. Yo
 Other useful commands: `refunds` (request history) and `audit` (hash-chain status).
 
 ---
+
+## Sharing one deployment with your team
+
+Send teammates the MCP URL, the API URL and, privately, the agent key (and the judge password for whoever approves refunds). Never put these in the repo or a public channel. Everyone shares the same captures and history, so agree who creates fresh captures before each run. If a key is ever exposed, click **Generate** next to it in Render → Environment and save, then share the new value.
 
 ## Limitations (free tier, MVP)
 

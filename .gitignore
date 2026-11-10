@@ -36,3 +36,4 @@ ENV/
 # Logs
 *.log
 
+vaultline_last_escalation.txt

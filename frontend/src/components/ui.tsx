@@ -48,9 +48,9 @@ export function StaleNote({ updatedAt }: { updatedAt: number | null }) {
 export function BrandMark() {
   return (
     <span className="brand-mark" aria-hidden>
-      <svg viewBox="0 0 32 32">
-        <path d="M3 5h7.5L16 20.5 21.5 5H29l-9.5 22h-7z" fill="#7A1420" />
-        <path d="M10.5 5 16 20.5l-1.4 3.9L7.6 5z" fill="#B4505B" />
+      <svg viewBox="0 0 48 48" fill="none">
+        <path d="M5 7h10l9 15 9-15h10L24 42 5 7Z" stroke="currentColor" strokeWidth="5" strokeLinejoin="round" />
+        <path d="M17 7h8L15 25" stroke="#D8BA98" strokeWidth="3" strokeLinecap="round" />
       </svg>
     </span>
   );
@@ -79,21 +79,7 @@ export const AlertCircleIcon = () => (
   <svg className="ico" viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="11" fill="#E4CDB4" /><path d="M12 6.8v6.4" stroke="#7A1420" strokeWidth="2.2" strokeLinecap="round" /><circle cx="12" cy="16.9" r="1.3" fill="#7A1420" /></svg>
 );
 
-/** Fixed "silk ribbon" background: deep teal with big champagne and burgundy waves. */
+/** Fixed background: alabaster page with a large midnight field, a tan field and a maroon swoosh. */
 export function SilkBackground() {
-  return (
-    <svg className="silk" viewBox="0 0 1440 900" preserveAspectRatio="xMinYMin slice" aria-hidden>
-      <defs>
-        <linearGradient id="silk-teal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#12474F" /><stop offset="1" stopColor="#0E3B43" /></linearGradient>
-        <linearGradient id="silk-champ" x1="0" y1="0" x2="1" y2="0.6"><stop offset="0" stopColor="#D9B99A" /><stop offset="0.45" stopColor="#F1E2CF" /><stop offset="0.7" stopColor="#E9D5BF" /><stop offset="1" stopColor="#D9B99A" /></linearGradient>
-        <linearGradient id="silk-wine" x1="0" y1="0" x2="1" y2="0.8"><stop offset="0" stopColor="#6E0F1A" /><stop offset="0.5" stopColor="#8B1A24" /><stop offset="1" stopColor="#6E0F1A" /></linearGradient>
-        <linearGradient id="silk-sheen" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#fff" stopOpacity="0" /><stop offset="0.5" stopColor="#fff" stopOpacity="0.28" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></linearGradient>
-      </defs>
-      <rect width="1440" height="900" fill="url(#silk-teal)" />
-      <path d="M-80 -60C300 -100 560 120 860 200s440 100 660 220V600C1280 470 1060 450 820 400S300 230 -80 260z" fill="url(#silk-champ)" />
-      <path d="M-80 60C300 30 560 200 860 270s440 110 660 230V540C1280 420 1060 400 820 350S300 170 -80 170z" fill="url(#silk-sheen)" />
-      <path d="M-80 310C320 260 560 450 840 460s460 -10 680 150V790C1280 650 1060 670 820 650S300 480 -80 560z" fill="url(#silk-wine)" />
-      <path d="M-80 790C300 730 600 880 900 860s440 -70 620 -40V900H-80z" fill="url(#silk-champ)" />
-    </svg>
-  );
+  return <div className="page-bg" aria-hidden />;
 }

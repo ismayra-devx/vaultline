@@ -12,12 +12,12 @@ const LICENSE = import.meta.env.VITE_AG_STUDIO_LICENSE_KEY as string | undefined
 // Match Studio's own chrome (edit panels, menus, grids) to the cream + burgundy palette.
 const vaultTheme = studioTheme.withParams({
   browserColorScheme: 'light',
-  backgroundColor: '#F6ECE1',
-  chromeBackgroundColor: '#F3E6D8',
-  foregroundColor: '#3A1A1A',
-  accentColor: '#7A1420',
-  borderColor: 'rgba(110, 15, 26, 0.12)',
-  fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+  backgroundColor: '#EFE8DF',
+  chromeBackgroundColor: '#EFE8DF',
+  foregroundColor: '#102F35',
+  accentColor: '#7F0303',
+  borderColor: 'rgba(216, 186, 152, 0.7)',
+  fontFamily: "'Inter', system-ui, sans-serif",
   studioWrapperBackgroundColor: 'transparent',
   studioWrapperBorder: 'none',
 } as never);
@@ -62,7 +62,7 @@ const initialState = {
         columns: 12, rowHeight: 48, widgetPadding: 0,
         // Transparent so each widget's own cream/burgundy card shows through.
         backgroundColor: 'transparent', widgetBackgroundColor: 'transparent',
-        widgetBorderEnabled: false, widgetBorderRadius: 20,
+        widgetBorderEnabled: false, widgetBorderRadius: 22,
       },
       widgetLayout: {
         decisions: { xTrack: 0, yTrack: 0, xSpan: 6, ySpan: 7 },

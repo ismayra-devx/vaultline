@@ -127,3 +127,21 @@ def test_paypal_timeout_is_unknown_not_failed(sandbox_app):
     pp.refund_mode = "timeout"
     r = refund(client, "5.00")
     assert r["decision"] == "ALLOW" and r["execution_status"] == "UNKNOWN"
+
+
+def test_partially_refunded_capture_registers_with_true_balance(sandbox_app):
+    client, pp, merchant = sandbox_app
+    r = client.post("/api/v1/captures/register", json={"capture_id": "PARTIAL1"}, headers=merchant)
+    assert r.status_code == 200 and r.json()["status"] == "PARTIALLY_REFUNDED" and r.json()["amount"] == "1000.00"
+    # $975 remains: a $20 refund escalates normally, nothing refunded twice.
+    assert refund(client, "20.00", cap="PARTIAL1")["decision"] == "ESCALATE"
+
+
+def test_fully_refunded_capture_is_refused(sandbox_app):
+    client, _, merchant = sandbox_app
+    assert client.post("/api/v1/captures/register", json={"capture_id": "REFUNDED1"}, headers=merchant).status_code == 422
+
+
+def test_capture_without_refund_history_is_refused(sandbox_app):
+    client, _, merchant = sandbox_app
+    assert client.post("/api/v1/captures/register", json={"capture_id": "NOORDER1"}, headers=merchant).status_code == 502

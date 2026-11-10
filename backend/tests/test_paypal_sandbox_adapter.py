@@ -44,6 +44,21 @@ class FakePayPal:
             return httpx.Response(200, json={"access_token": f"tok{self.tokens_issued}", "expires_in": 32400})
         if self.reject_first_bearer and req.headers.get("authorization") == "Bearer tok1":
             return httpx.Response(401, json={"name": "AUTHENTICATION_FAILURE"})
+        if req.method == "GET" and path == "/v2/checkout/orders/ORD1":
+            up = lambda c: [{"rel": "up", "href": f"https://api.sandbox.paypal.com/v2/payments/captures/{c}"}]
+            return httpx.Response(200, json={"id": "ORD1", "purchase_units": [{"payments": {
+                "captures": [{"id": "PARTIAL1"}, {"id": "OTHERCAP"}],
+                "refunds": [
+                    {"id": "R1", "status": "COMPLETED", "amount": {"value": "20.00", "currency_code": "USD"}, "links": up("PARTIAL1")},
+                    {"id": "R2", "status": "PENDING", "amount": {"value": "5.00", "currency_code": "USD"}, "links": up("PARTIAL1")},
+                    {"id": "R3", "status": "FAILED", "amount": {"value": "99.00", "currency_code": "USD"}, "links": up("PARTIAL1")},
+                    {"id": "R4", "status": "COMPLETED", "amount": {"value": "7.00", "currency_code": "USD"}, "links": up("OTHERCAP")},
+                ]}}]})
+        if req.method == "GET" and path.startswith("/v2/payments/captures/") and path.rsplit("/", 1)[-1] in ("PARTIAL1", "REFUNDED1", "NOORDER1"):
+            cid = path.rsplit("/", 1)[-1]
+            status = {"PARTIAL1": "PARTIALLY_REFUNDED", "REFUNDED1": "REFUNDED", "NOORDER1": "PARTIALLY_REFUNDED"}[cid]
+            links = [] if cid == "NOORDER1" else [{"rel": "up", "href": "https://api.sandbox.paypal.com/v2/checkout/orders/ORD1"}]
+            return httpx.Response(200, json={"id": cid, "status": status, "amount": {"value": "1000.00", "currency_code": "USD"}, "links": links})
         if req.method == "GET" and path.startswith("/v2/payments/captures/"):
             cid = path.rsplit("/", 1)[-1]
             if cid == "MISSING":
@@ -212,3 +227,13 @@ def test_secret_never_in_request_except_basic_auth(adapter, pp):
     adapter.refund_capture(paypal_request_id="exec-l", capture_id="CAPTURE1", amount=Decimal("5.00"))
     for c in pp.calls:
         assert SECRET not in str(c.url) and SECRET.encode() not in c.content
+
+
+def test_refunded_total_reads_paypal_order_history(adapter):
+    # COMPLETED 20 + PENDING 5 for this capture; FAILED and other-capture refunds ignored.
+    assert adapter.get_refunded_total("PARTIAL1") == Decimal("25.00")
+
+
+def test_refunded_total_without_order_link_refuses_to_guess(adapter):
+    with pytest.raises(PayPalUnavailable):
+        adapter.get_refunded_total("NOORDER1")

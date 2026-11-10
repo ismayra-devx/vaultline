@@ -1,6 +1,7 @@
 # Vaultline on Render (Blueprint). Two public HTTPS services, PayPal Sandbox only.
 #   vaultline-api  FastAPI security backend + PayPal Sandbox adapter
 #   vaultline-mcp  MCP server (streamable HTTP) that agents connect to
+#   vaultline-dashboard  merchant control plane (React + AG Studio static site)
 # Nothing here runs on localhost: both services refuse to start in hosted mode without
 # real secrets, the PayPal Sandbox adapter, and an https backend URL.
 # Setup guide: docs/DEPLOY.md
@@ -35,6 +36,9 @@ services:
         generateValue: true
       - key: VAULTLINE_DB_PATH
         value: vaultline.db
+      # Exact https origin of vaultline-dashboard (e.g. https://vaultline-dashboard.onrender.com) for CORS.
+      - key: VAULTLINE_ALLOWED_ORIGINS
+        sync: false
 
   - type: web
     name: vaultline-mcp
@@ -56,3 +60,29 @@ services:
       - key: VAULTLINE_API_BASE_URL
         sync: false
       # Deliberately NO VAULTLINE_AGENT_KEY here: each agent sends its own key.
+
+  - type: web
+    name: vaultline-dashboard
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Public https URL of vaultline-api. If left empty, the login page asks for it.
+      - key: VITE_API_BASE_URL
+        sync: false
+      # AG Studio licence key (shipped to the browser by design). Empty = trial watermark.
+      - key: VITE_AG_STUDIO_LICENSE_KEY
+        sync: false

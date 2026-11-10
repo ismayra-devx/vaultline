@@ -262,6 +262,42 @@ class PayPalSandboxAdapter(PaypalAdapter):
             return RefundResult(refund_id=refund_id, capture_id=capture_id, status="PENDING", amount=verified.amount, currency=verified.currency, paypal_debug_id=verified.paypal_debug_id)
         return RefundResult(refund_id=refund_id, capture_id=capture_id, status=verified.status, amount=verified.amount, currency=verified.currency, paypal_debug_id=verified.paypal_debug_id)
 
+    def get_refunded_total(self, capture_id: str) -> Decimal:
+        """Sum of COMPLETED + PENDING refunds PayPal holds for this capture.
+
+        Read from the parent order (the capture's "up" link), which lists every refund.
+        Used so a partially refunded sandbox capture can be re-registered with its true
+        remaining balance after a restart. Raises if the history cannot be read, so the
+        caller never guesses a balance.
+        """
+        if not _ID_RE.match(capture_id or ""):
+            raise PayPalValidationError("Invalid capture id.")
+        cap = self._request("GET", f"/v2/payments/captures/{capture_id}")
+        order_id = None
+        for link in cap.get("links", []) or []:
+            href = link.get("href", "") if isinstance(link, dict) else ""
+            if link.get("rel") == "up" and "/checkout/orders/" in href:
+                order_id = href.rstrip("/").rsplit("/", 1)[-1]
+        if not order_id or not _ID_RE.match(order_id):
+            raise PayPalUnavailable("Could not find the order for this capture to read its refund history.")
+        order = self._request("GET", f"/v2/checkout/orders/{order_id}")
+        total = Decimal("0")
+        try:
+            for unit in order.get("purchase_units", []) or []:
+                payments = unit.get("payments") or {}
+                captures = payments.get("captures") or []
+                single_capture = len(captures) == 1 and captures[0].get("id") == capture_id
+                for ref in payments.get("refunds") or []:
+                    if str(ref.get("status", "")).upper() not in ("COMPLETED", "PENDING"):
+                        continue
+                    ups = [l.get("href", "") for l in ref.get("links", []) or [] if isinstance(l, dict) and l.get("rel") == "up"]
+                    belongs = any(h.rstrip("/").endswith("/" + capture_id) for h in ups) or (not ups and single_capture)
+                    if belongs:
+                        total += _money(ref["amount"]["value"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PayPalUnavailable("PayPal order refund history was malformed.") from exc
+        return total
+
     def get_refund(self, refund_id: str) -> RefundResult:
         if not _ID_RE.match(refund_id or ""):
             raise PayPalValidationError("Invalid refund id.")

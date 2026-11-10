@@ -84,12 +84,12 @@ Set your sandbox credentials for this terminal:
 
 ```bash
 python -m backend.paypal.sandbox_tools check                          # credentials OK?
-python -m backend.paypal.sandbox_tools create-capture --amount 300.00
+python -m backend.paypal.sandbox_tools create-capture --amount 1000.00
 ```
 
 `create-capture` prints a PayPal link. Open it, log in with the sandbox **Personal** account, and click **Pay**. You'll land on example.com, which is expected. The terminal then prints `CAPTURE ID: ...`.
 
-Make **at least two**: one of **$300** for the $250 prompt-injection demo, and one more for the $5 and $20 demos. The $250 request must be blocked by the agent's limit, not by the capture being too small.
+One **$1000** capture is enough for many demo runs: each run refunds $25 ($5 + $20), and the $250 prompt-injection attempt is blocked by the agent's limit, never by a low balance. Vaultline reads PayPal's own refund history when it (re)registers a capture, so a partially refunded capture keeps working after a free-tier restart with its true remaining balance.
 
 Register each one with the hosted backend. It is verified with PayPal before it is accepted:
 
@@ -134,7 +134,7 @@ Requests without a bearer key get **401** before reaching any tool. The MCP serv
 `tools/vaultline_demo.ps1` acts as the agent and calls the hosted MCP server:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\vaultline_demo.ps1 -CaptureA <fresh $300 capture> -CaptureB <second capture>
+powershell -ExecutionPolicy Bypass -File .\tools\vaultline_demo.ps1 -CaptureA <capture id> -CaptureB <capture id>
 ```
 
 1. Paste the agent key when asked. It stays hidden and is never saved.
@@ -142,7 +142,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\vaultline_demo.ps1 -CaptureA <f
 3. It then prints the `vaultline_admin.py approve ...` command. Run that and enter the judge password.
 4. Run the script again with `-Status` to see the $20 refund COMPLETED with its PayPal refund ID.
 
-Captures are used up by a run, so register fresh ones before each demo (section 5). If you're using another deployment, add `-McpUrl https://<mcp>/mcp -ApiUrl https://<api>`.
+A single large capture can be used for both. It stays usable until its balance is spent (section 5). If you're using another deployment, add `-McpUrl https://<mcp>/mcp -ApiUrl https://<api>`.
 
 ### With an AI agent
 
@@ -173,7 +173,7 @@ Send teammates the MCP URL, the API URL and, privately, the agent key (and the j
 ## Limitations (free tier, MVP)
 
 - **Cold starts:** free services sleep after ~15 idle minutes, and the first request then takes up to about a minute. Open both `/health` URLs before a demo.
-- **Database is not persistent on the free plan:** history, approvals and sessions reset on every restart or redeploy. Captures listed in `VAULTLINE_SANDBOX_CAPTURE_IDS` are re-registered at startup if they are still fully unrefunded. Once refunded they are refused, because Vaultline can't know their remaining balance, so use fresh captures for each demo run. For persistence, move to a paid instance with a disk and point `VAULTLINE_DB_PATH` at it.
+- **Database is not persistent on the free plan:** request history, approvals and sessions reset on every restart or redeploy. Captures listed in `VAULTLINE_SANDBOX_CAPTURE_IDS` are re-registered at startup with their remaining balance taken from PayPal's refund history, so the demo keeps working; only the history view starts empty. For persistence, use a paid instance with a disk and point `VAULTLINE_DB_PATH` at it.
 - **Single tenant:** one merchant and one agent per deployment. Multiple teams get separate instances (option B).
 - **Merchant dashboard:** not deployed yet. Use `tools/vaultline_admin.py` until it is. The API already accepts a dashboard origin via `VAULTLINE_ALLOWED_ORIGINS`.
 - **Sandbox only:** the live PayPal host is deliberately not in the adapter's allowlist.

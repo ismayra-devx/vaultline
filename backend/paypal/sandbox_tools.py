@@ -4,7 +4,7 @@
     python -m backend.paypal.sandbox_tools check [CAPTURE_ID]
 
     # 2. Create a fresh capture to demo with (opens a sandbox buyer approval link)
-    python -m backend.paypal.sandbox_tools create-capture --amount 30.00
+    python -m backend.paypal.sandbox_tools create-capture --amount 1000.00
 
 Reads PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET from the environment. Sandbox host only.
 This tool never issues refunds: refunds only happen through Vaultline's policy flow.
@@ -89,7 +89,7 @@ def main() -> None:
     c = sub.add_parser("check", help="verify credentials, optionally look up a capture")
     c.add_argument("capture_id", nargs="?")
     cc = sub.add_parser("create-capture", help="create and capture a sandbox order to demo with")
-    cc.add_argument("--amount", default="30.00")
+    cc.add_argument("--amount", default="1000.00")
     cc.add_argument("--wait", type=int, default=300, help="seconds to wait for buyer approval")
     args = p.parse_args()
     try:

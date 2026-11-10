@@ -1,6 +1,8 @@
 # Vaultline Security Backend
 
-> **Run it hosted on PayPal Sandbox:** see [docs/DEPLOY.md](docs/DEPLOY.md) (Render, two HTTPS services, team instance or your own sandbox).
+> **Judges:** start at [docs/JUDGES.md](docs/JUDGES.md) (live dashboard, MCP endpoint, test steps).
+> **Run it hosted on PayPal Sandbox:** see [docs/DEPLOY.md](docs/DEPLOY.md) (Render: API, MCP server and dashboard; team instance or your own sandbox).
+> **License:** MIT, see [LICENSE](LICENSE).
 
 Vaultline is an authorization gateway between autonomous AI agents and PayPal. An AI agent can request a refund, but never holds PayPal credentials and cannot approve its own requests. The Vaultline backend evaluates requests against a policy ladder, deciding whether to `ALLOW`, `BLOCK`, or `ESCALATE` to a human judge. Only an isolated PayPal adapter may execute money movements.
 

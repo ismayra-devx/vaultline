@@ -3,8 +3,8 @@
 #   powershell -ExecutionPolicy Bypass -File .\tools\vaultline_demo.ps1 -CaptureA <id> -CaptureB <id>
 #   powershell -ExecutionPolicy Bypass -File .\tools\vaultline_demo.ps1 -Status
 #
-# CaptureA: fresh $300 sandbox capture for the $250 prompt-injection attempt (stays untouched).
-# CaptureB: fresh sandbox capture for the $5 and $20 refunds.
+# CaptureA: registered sandbox capture for the $250 prompt-injection attempt (blocked, never refunded).
+# CaptureB: registered capture for the $5 and $20 refunds (can be the same one as CaptureA).
 # Captures must be registered with Vaultline (VAULTLINE_SANDBOX_CAPTURE_IDS or register-capture).
 # Asks for the agent key (VAULTLINE_AGENT_KEY from Render > vaultline-api > Environment).
 # The key is only sent to the MCP server and is never printed or saved.
@@ -19,7 +19,7 @@ param(
 
 $Mcp = $McpUrl
 if (-not $Status) {
-  if (-not $CaptureA) { $CaptureA = Read-Host "Capture id for the `$250 attempt (a fresh `$300 capture)" }
+  if (-not $CaptureA) { $CaptureA = Read-Host "Capture id for the `$250 attempt" }
   if (-not $CaptureB) { $CaptureB = Read-Host "Capture id for the `$5 and `$20 refunds" }
 }
 

@@ -52,8 +52,9 @@ def build_adapter_from_env() -> PaypalAdapter | None:
 def register_capture(conn: sqlite3.Connection, adapter: PaypalAdapter, merchant_id: str, capture_id: str) -> dict:
     """Verify a capture with PayPal and record it as refundable for this merchant.
 
-    Only fresh COMPLETED USD captures are accepted, so Vaultline's refunded-balance tracking
-    starts from a known zero. Re-registering an existing capture is a no-op.
+    COMPLETED captures start at zero refunded. PARTIALLY_REFUNDED captures (e.g. after a
+    free-tier restart wiped the database) start from PayPal's own refund history, so one large
+    sandbox capture can serve many demo runs. Re-registering an existing capture is a no-op.
     """
     existing = conn.execute("SELECT merchant_id, original_amount, refunded_amount, status FROM captures WHERE id = ?", (capture_id,)).fetchone()
     if existing:
@@ -62,17 +63,26 @@ def register_capture(conn: sqlite3.Connection, adapter: PaypalAdapter, merchant_
         return {"capture_id": capture_id, "status": existing["status"], "amount": existing["original_amount"], "registered": False}
 
     cap = adapter.get_capture(capture_id)
-    if cap.status != "COMPLETED":
-        raise ValueError(f"Capture status is {cap.status}; only fresh COMPLETED captures can be registered.")
     if cap.currency != "USD":
         raise ValueError("Only USD captures are supported.")
+    if cap.status == "COMPLETED":
+        refunded = Decimal("0")
+    elif cap.status == "PARTIALLY_REFUNDED" and hasattr(adapter, "get_refunded_total"):
+        # Start from PayPal's own refund history, never from a guess.
+        refunded = Decimal(adapter.get_refunded_total(capture_id))
+    else:
+        raise ValueError(f"Capture status is {cap.status}; it cannot be registered as refundable.")
+    original = Decimal(cap.amount)
+    if refunded >= original:
+        raise ValueError("Capture has no refundable balance left.")
+    status = "COMPLETED" if refunded == 0 else "PARTIALLY_REFUNDED"
     conn.execute(
         "INSERT INTO captures (id, merchant_id, original_amount, currency, refunded_amount, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (cap.capture_id, merchant_id, f"{Decimal(cap.amount):.2f}", cap.currency, "0.00", "COMPLETED", datetime.now(timezone.utc).isoformat()),
+        (cap.capture_id, merchant_id, f"{original:.2f}", cap.currency, f"{refunded:.2f}", status, datetime.now(timezone.utc).isoformat()),
     )
     conn.commit()
-    log.info("registered sandbox capture %s amount=%s", cap.capture_id, cap.amount)
-    return {"capture_id": cap.capture_id, "status": "COMPLETED", "amount": f"{Decimal(cap.amount):.2f}", "registered": True}
+    log.info("registered sandbox capture %s amount=%s already_refunded=%s", cap.capture_id, original, refunded)
+    return {"capture_id": cap.capture_id, "status": status, "amount": f"{original:.2f}", "registered": True}
 
 
 def register_captures_from_env(conn: sqlite3.Connection, adapter: PaypalAdapter, merchant_id: str) -> None:

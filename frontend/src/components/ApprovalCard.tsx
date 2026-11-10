@@ -3,6 +3,8 @@ import { api } from '../api/client';
 import type { ApiError, RefundRequest } from '../api/types';
 import { useData } from '../lib/data';
 import { isExpired, money, STATUS_TONE, time } from '../lib/format';
+
+const statusLabel = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replaceAll('_', ' ');
 import { Badge, ExecBadge } from './ui';
 
 /**
@@ -68,7 +70,7 @@ export function ApprovalCard({ r, compact = false }: { r: RefundRequest; compact
           <div className="muted mono small">{r.request_id}</div>
         </div>
         <div className="approval-meta">
-          <Badge tone={actionable ? 'warn' : STATUS_TONE(String(r.status))}>{pending && expired ? 'EXPIRED' : String(r.status).replaceAll('_', ' ')}</Badge>
+          <Badge tone={actionable ? 'warn' : STATUS_TONE(String(r.status))}>{pending && expired ? 'Expired' : statusLabel(String(r.status))}</Badge>
           <ExecBadge s={r.execution_status} />
         </div>
       </header>

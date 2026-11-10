@@ -1,11 +1,25 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AgStudio, AgStudioProvider, createWidgets } from 'ag-studio-react';
+import { studioTheme } from 'ag-studio';
 import { useData } from '../lib/data';
 import { ApprovalQueueWidget, AuditHealthWidget, DecisionBreakdownWidget } from './widgets';
 
 // AG Studio licence keys are designed to ship in client bundles (not a secret).
 // Without a key Studio runs with a watermark — fine for local dev, set it for the judge build.
 const LICENSE = import.meta.env.VITE_AG_STUDIO_LICENSE_KEY as string | undefined;
+
+// Match Studio's own chrome (edit panels, menus, grids) to the dashboard's dark glass palette.
+const vaultTheme = studioTheme.withParams({
+  browserColorScheme: 'dark',
+  backgroundColor: '#0e1328',
+  chromeBackgroundColor: '#0b1022',
+  foregroundColor: '#e6eaff',
+  accentColor: '#8b7cff',
+  borderColor: 'rgba(150, 170, 255, 0.16)',
+  fontFamily: "'Manrope', system-ui, sans-serif",
+  studioWrapperBackgroundColor: 'transparent',
+  studioWrapperBorder: 'none',
+} as never);
 
 const SHIELD = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>`;
 
@@ -45,8 +59,8 @@ const initialState = {
       },
       layout: {
         columns: 12, rowHeight: 48, widgetPadding: 0,
-        backgroundColor: '#0b0f14', widgetBackgroundColor: '#121821',
-        widgetBorderEnabled: true, widgetBorderColor: '#243041', widgetBorderWidth: 1, widgetBorderRadius: 10,
+        backgroundColor: 'transparent', widgetBackgroundColor: 'rgba(20, 26, 48, 0.62)',
+        widgetBorderEnabled: true, widgetBorderColor: 'rgba(150, 170, 255, 0.16)', widgetBorderWidth: 1, widgetBorderRadius: 18,
       },
       widgetLayout: {
         decisions: { xTrack: 0, yTrack: 0, xSpan: 6, ySpan: 7 },
@@ -57,7 +71,34 @@ const initialState = {
   ],
 };
 
+const NARROW = '(max-width: 760px)';
+function useNarrow() {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(NARROW).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW);
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return narrow;
+}
+
 export function StudioDashboard() {
+  const narrow = useNarrow();
+  // On phones the Studio canvas and its side panels are too cramped, so the same widgets stack natively.
+  if (narrow) {
+    return (
+      <div className="mobile-stack">
+        <section className="glass panel"><DecisionBreakdownWidget /></section>
+        <section className="glass panel"><ApprovalQueueWidget /></section>
+        <section className="glass panel"><AuditHealthWidget /></section>
+      </div>
+    );
+  }
+  return <StudioCanvas />;
+}
+
+function StudioCanvas() {
   const { requests } = useData();
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   // Flat rows so analysts can build extra built-in charts/grids. amount_usd is display/analytics only.
@@ -88,14 +129,14 @@ export function StudioDashboard() {
   return (
     <AgStudioProvider licenseKey={LICENSE}>
       <div className="studio-bar">
-        <span className="muted small">AG Studio · custom Vaultline widgets on live backend data</span>
+        <span className="muted small">Live view of every refund your agents attempt. Built on AG Studio; use Edit dashboard to add your own charts.</span>
         <button className="btn" aria-pressed={mode === 'edit'} onClick={() => setMode((m) => (m === 'view' ? 'edit' : 'view'))}>
           {mode === 'view' ? 'Edit dashboard' : 'Done editing'}
         </button>
       </div>
       <div className="studio-host">
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        <AgStudio {...({ data, widgets, initialState, mode } as any)} />
+        <AgStudio {...({ data, widgets, initialState, mode, theme: vaultTheme } as any)} />
       </div>
     </AgStudioProvider>
   );

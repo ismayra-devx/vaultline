@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { api, apiBase, setApiBase, validApiBase } from '../api/client';
 import type { AnalystAnswer, ApiError, Decision, RefundRequest } from '../api/types';
 import { ApprovalCard } from '../components/ApprovalCard';
-import { DecisionBadge, Empty, ErrorState, ExecBadge, Loading, StaleNote } from '../components/ui';
+import { BrandMark, DecisionBadge, Empty, ErrorState, ExecBadge, Loading, StaleNote } from '../components/ui';
 import { useData } from '../lib/data';
 import { ago, decimalGt, money, time } from '../lib/format';
 
@@ -18,7 +18,7 @@ export function RequestsPage({ onOpen }: { onOpen: (id: string) => void }) {
       {requests.stale && <StaleNote updatedAt={requests.updatedAt} />}
       <div className="toolbar" role="group" aria-label="Filter by decision">
         {(['ALL', 'ALLOW', 'ESCALATE', 'BLOCK'] as const).map((d) => (
-          <button key={d} className={`chip ${filter === d ? 'on' : ''}`} aria-pressed={filter === d} onClick={() => setFilter(d)}>{d}</button>
+          <button key={d} className={`chip ${filter === d ? 'on' : ''}`} aria-pressed={filter === d} onClick={() => setFilter(d)}>{d === 'ALL' ? 'All' : d}</button>
         ))}
       </div>
       {rows.length === 0 ? (
@@ -217,8 +217,8 @@ export function LoginPage({ onDone }: { onDone: () => void }) {
   return (
     <main className="login">
       <form onSubmit={submit} className="login-card">
-        <div className="brand big">VAULTLINE</div>
-        <p className="muted small">Merchant control plane · PayPal Sandbox</p>
+        <div className="brand big"><BrandMark />Vaultline</div>
+        <p className="muted small">Approve or block what your AI agents try to refund. Connected to PayPal Sandbox.</p>
         <label>Username<input autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} required /></label>
         <label>Password<input type="password" autoComplete="current-password" value={p} onChange={(e) => setP(e.target.value)} required /></label>
         {showApi ? (

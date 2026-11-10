@@ -1,6 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { api, hasSession, USING_FIXTURES } from './api/client';
-import { Loading } from './components/ui';
+import { BrandMark, Loading } from './components/ui';
 import { DataProvider, useData } from './lib/data';
 import { ActivityPage, AnalystPanel, ApprovalsPage, LoginPage, RequestsPage } from './pages/pages';
 
@@ -20,11 +20,17 @@ export default function App() {
   const [signedIn, setSignedIn] = useState(hasSession);
   const onAuthError = useCallback(() => setSignedIn(false), []);
   // Route guards are UX only — every merchant route is enforced by the backend.
-  if (!signedIn) return <LoginPage onDone={() => setSignedIn(true)} />;
   return (
-    <DataProvider onAuthError={onAuthError}>
-      <Shell onLogout={() => { api.logout(); setSignedIn(false); }} />
-    </DataProvider>
+    <>
+      <div className="aurora" aria-hidden />
+      {!signedIn ? (
+        <LoginPage onDone={() => setSignedIn(true)} />
+      ) : (
+        <DataProvider onAuthError={onAuthError}>
+          <Shell onLogout={() => { api.logout(); setSignedIn(false); }} />
+        </DataProvider>
+      )}
+    </>
   );
 }
 
@@ -39,13 +45,27 @@ function Shell({ onLogout }: { onLogout: () => void }) {
     return () => removeEventListener('hashchange', h);
   }, []);
   const pending = (requests.data ?? []).filter((r) => r.status === 'AWAITING_APPROVAL').length;
+  // The vault line under the top bar brightens briefly whenever the backend reports something new.
+  const signature = JSON.stringify((requests.data ?? []).map((r) => [r.request_id, r.status, r.execution_status]));
+  const [fresh, setFresh] = useState(false);
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    if (!requests.data) return;
+    if (last.current !== null && last.current !== signature) {
+      setFresh(true);
+      const t = setTimeout(() => setFresh(false), 900);
+      last.current = signature;
+      return () => clearTimeout(t);
+    }
+    last.current = signature;
+  }, [signature, requests.data]);
   const live = !requests.error && requests.updatedAt;
 
   return (
     <div className="app">
       {USING_FIXTURES && <div className="fixture-banner" role="alert">DEMO FIXTURES — not live backend data. Unset VITE_DEMO_FIXTURES for the real build.</div>}
-      <header className="topbar">
-        <div className="brand">VAULTLINE<span className="tag">Every agent has a limit.</span></div>
+      <header className={`topbar ${fresh ? 'fresh' : ''}`}>
+        <div className="brand"><BrandMark />Vaultline<span className="tag">Every agent has a limit.</span></div>
         <nav aria-label="Main">
           {ROUTES.map((r) => (
             <a key={r.id} href={`#/${r.id}`} className={route === r.id ? 'on' : ''} aria-current={route === r.id ? 'page' : undefined}>
@@ -54,9 +74,9 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           ))}
         </nav>
         <div className="who">
-          <span className={`live ${live ? 'on' : ''}`} title={live ? 'Polling backend every 2s' : 'Backend unreachable'}>{live ? 'Live' : 'Offline'}</span>
+          <span className={`live ${live ? 'on' : ''}`} title={live ? 'Polling backend every 2s' : 'Backend unreachable'}>{live ? 'Live' : 'Reconnecting'}</span>
           <button className="btn btn-ghost" onClick={() => setAnalyst((v) => !v)} aria-expanded={analyst}>Analyst</button>
-          <span className="small">Merchant</span>
+          <span className="small muted who-name">Merchant</span>
           <button className="btn btn-ghost" onClick={onLogout}>Sign out</button>
         </div>
       </header>
@@ -76,3 +96,4 @@ function Shell({ onLogout }: { onLogout: () => void }) {
     </div>
   );
 }
+

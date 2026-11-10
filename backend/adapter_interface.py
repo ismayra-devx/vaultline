@@ -76,22 +76,6 @@ class PaypalAdapter(ABC):
         """Fetches status of an existing refund."""
         pass
 
-@runtime_checkable
-class PayPalAdapter(Protocol):
-    """
-    Structural Protocol alias for PayPal adapter.
-    Synchronous contract matching PaypalAdapter ABC.
-    """
-
-    def get_capture(self, capture_id: str) -> CaptureResult: ...
-
-    def refund_capture(
-        self,
-        paypal_request_id: str,
-        capture_id: str,
-        amount: Decimal,
-        currency: str = "USD",
-        **kwargs,
-    ) -> RefundResult: ...
-
-    def get_refund(self, refund_id: str) -> RefundResult: ...
+# Deprecated for MVP: Aliased directly to PaypalAdapter to avoid competing contracts.
+# All production adapters and test doubles must implement PaypalAdapter.
+PayPalAdapter = PaypalAdapter

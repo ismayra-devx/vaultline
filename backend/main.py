@@ -72,8 +72,11 @@ def create_app(
         paypal_adapter = adapter
     elif os.getenv("VAULTLINE_USE_REAL_PAYPAL", "false").lower() in ("true", "1", "yes"):
         try:
-            from backend.paypal.adapter import PayPalSandboxAdapter
-            paypal_adapter = PayPalSandboxAdapter()
+            try:
+                from backend.paypal.adapter import PayPalSandboxAdapter
+            except ImportError:
+                from backend.paypal import PayPalSandboxAdapter
+            paypal_adapter = PayPalSandboxAdapter.from_env()
         except ImportError:
             paypal_adapter = FakePaypalAdapter()
     else:

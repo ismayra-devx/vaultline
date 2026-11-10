@@ -167,6 +167,7 @@ async def test_policy_tool_returns_limits():
     ({"decision": "ALLOW", "execution_status": "FAILED"}, "failed"),
     ({"decision": "ESCALATE", "execution_status": "NOT_STARTED", "status": "AWAITING_APPROVAL"}, "Awaiting merchant approval"),
     ({"decision": "ESCALATE", "execution_status": "NOT_STARTED", "status": "DENIED"}, "DENIED"),
+    ({"decision": "DENIED", "status": "DENIED"}, "DENIED"),
     ({"decision": "BLOCK", "execution_status": "COMPLETED", "refund_id": "R1"}, "No refund was executed"),
 ])
 def test_outcome_text_never_overclaims(r, expect):

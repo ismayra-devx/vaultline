@@ -49,8 +49,13 @@ RESULT_FIELDS = (
 def outcome_text(r: dict[str, Any]) -> str:
     """A deterministic, conservative summary. Never claims success without verified COMPLETED."""
     decision = r.get("decision")
+    status = (r.get("status") or "").upper()
     execution = (r.get("execution_status") or "").upper()
     refund_id = r.get("refund_id") or r.get("paypal_refund_id")
+    if status == "DENIED" or decision == "DENIED":
+        return "The merchant DENIED this refund. No refund was executed."
+    if status == "EXPIRED":
+        return "The approval window expired. No refund was executed."
     if decision == "BLOCK":
         return "BLOCKED by Vaultline policy. No refund was executed."
     if execution == "COMPLETED" and refund_id:
@@ -61,11 +66,6 @@ def outcome_text(r: dict[str, Any]) -> str:
         return ("Refund outcome is not yet verified. Do NOT tell the customer it succeeded and do NOT submit "
                 "a new request; check again later with get_request_status.")
     if decision == "ESCALATE" and execution in {"", "NOT_STARTED"}:
-        status = (r.get("status") or "").upper()
-        if status == "DENIED":
-            return "The merchant DENIED this refund. No refund was executed."
-        if status == "EXPIRED":
-            return "The approval window expired. No refund was executed."
         return "Awaiting merchant approval. No refund has been executed yet; check later with get_request_status."
     if decision == "ALLOW":
         return f"Authorized by Vaultline, but PayPal has not confirmed completion yet (execution status: {execution or 'NOT_STARTED'})."

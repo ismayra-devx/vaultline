@@ -1812,3 +1812,43 @@ body {
 .topbar .brand-name {
   color: var(--ink);
 }
+
+/* ---------- Equalised dashboard geometry ----------
+   Studio grid: 11 rows x 48px (top row 7, audit 4). Each widget card sits 8px inside its slot,
+   so the frame gets the same 35px inset on every side and the Filters panel lines up with the cards. */
+.studio-host {
+  --rows: calc(48px * 11);
+  height: calc(var(--rows) + 54px);
+  min-height: 0;
+  overflow: hidden;
+}
+.studio-host .ag-studio-layout-widget {
+  box-shadow: none !important;
+  outline: none !important;
+}
+.studio-host .ag-studio-root-panel-container,
+.studio-host .ag-studio-root-panel-container-right {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.studio-host .ag-studio-root-panel-container-right {
+  box-sizing: border-box;
+  height: var(--rows) !important;
+  padding: 8px 8px 8px 0;
+}
+.studio-host .ag-studio-filters-panel {
+  height: 100% !important;
+  margin: 0 0 0 -4px;
+  box-shadow: 0 5px 18px rgba(15, 65, 74, 0.055) !important;
+}
+/* hero empty-state subtitle readable on maroon */
+.w-hero .state p,
+.w-hero .state .muted {
+  color: rgba(239, 232, 223, 0.92) !important;
+}
+
+/* centre the approvals empty state in the card, level with the hero card text */
+.w-queue > .state {
+  margin-top: -28px;
+}

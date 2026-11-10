@@ -59,7 +59,6 @@ function Shell({ onLogout }: { onLogout: () => void }) {
     }
     last.current = signature;
   }, [signature, requests.data]);
-  const live = !requests.error && requests.updatedAt;
 
   return (
     <div className="app">
@@ -74,7 +73,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           ))}
         </nav>
         <div className="who">
-          <span className={`live ${live ? 'on' : ''}`} title={live ? 'Polling backend every 2s' : 'Backend unreachable'} role="status">{live ? 'Live' : 'Reconnecting'}</span>
+          
           <button className="link" onClick={() => setAnalyst((v) => !v)} aria-expanded={analyst}>Analyst</button>
           <span className="who-name">Merchant</span>
           <button className="link" onClick={onLogout}>Sign out</button>

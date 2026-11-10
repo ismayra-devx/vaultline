@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 from decimal import Decimal
 from typing import Optional
@@ -8,6 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from backend.config import Config, redact_sensitive_data
 from backend.db import Database
+from backend.adapter_interface import PaypalAdapter
 from backend.fake_adapter import FakePaypalAdapter
 from backend.services import VaultlineService
 from backend.routes_agent import router as agent_router
@@ -58,7 +60,7 @@ class PureASGICorrelationMiddleware:
 def create_app(
     config: Optional[Config] = None,
     db: Optional[Database] = None,
-    adapter: Optional[FakePaypalAdapter] = None,
+    adapter: Optional[PaypalAdapter] = None,
     service: Optional[VaultlineService] = None,
 ) -> FastAPI:
     cfg = config or Config()
@@ -66,11 +68,22 @@ def create_app(
     database.init_schema()
     database.seed_defaults(cfg)
 
-    paypal_adapter = adapter or FakePaypalAdapter()
-    # Seed default captures into fake adapter
-    paypal_adapter.seed_capture("CAP_A", Decimal("300.00"), "USD", "COMPLETED")
-    paypal_adapter.seed_capture("CAP_B", Decimal("300.00"), "USD", "COMPLETED")
-    paypal_adapter.seed_capture("CAP_C", Decimal("300.00"), "USD", "COMPLETED")
+    if adapter:
+        paypal_adapter = adapter
+    elif os.getenv("VAULTLINE_USE_REAL_PAYPAL", "false").lower() in ("true", "1", "yes"):
+        try:
+            from backend.paypal.adapter import PayPalSandboxAdapter
+            paypal_adapter = PayPalSandboxAdapter()
+        except ImportError:
+            paypal_adapter = FakePaypalAdapter()
+    else:
+        paypal_adapter = FakePaypalAdapter()
+
+    # Seed default captures if supported (e.g. test doubles)
+    if hasattr(paypal_adapter, "seed_capture"):
+        paypal_adapter.seed_capture("CAP_A", Decimal("300.00"), "USD", "COMPLETED")
+        paypal_adapter.seed_capture("CAP_B", Decimal("300.00"), "USD", "COMPLETED")
+        paypal_adapter.seed_capture("CAP_C", Decimal("300.00"), "USD", "COMPLETED")
 
     vaultline_service = service or VaultlineService(
         db=database,

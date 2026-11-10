@@ -1,4 +1,5 @@
 import os
+os.environ.setdefault("VAULTLINE_USE_REAL_PAYPAL", "false")
 import tempfile
 import pytest
 from decimal import Decimal

@@ -126,12 +126,13 @@ class RefundResult:
 
 ## 4. Lifecycle & Factory Configuration
 
-### 4.1 Production Adapter Instantiation
+### 4.1 Production Adapter Instantiation & Explicit Mode Configuration
 In [`backend/main.py`](file:///e:/pyfol/backend/main.py):
-- When `VAULTLINE_USE_REAL_PAYPAL=true`, the application calls `PayPalSandboxAdapter.from_env()`.
-- If credentials or module imports fail, startup aborts immediately (**fail closed**).
-- When `VAULTLINE_USE_REAL_PAYPAL=false`, the server defaults to `FakePaypalAdapter()` for development.
-- In automated test suites, `create_app(adapter=test_double)` permits deterministic in-memory injection.
+- When `adapter is not None` is explicitly provided (such as in unit tests), the injected adapter is used directly.
+- Otherwise, `VAULTLINE_USE_REAL_PAYPAL` must be explicitly configured:
+  - `VAULTLINE_USE_REAL_PAYPAL=true`: Calls `PayPalSandboxAdapter.from_env()`. If credentials or module imports fail, startup aborts immediately with a `RuntimeError` (**fail closed**); it NEVER silently instantiates `FakePaypalAdapter`.
+  - `VAULTLINE_USE_REAL_PAYPAL=false`: Explicitly instantiates `FakePaypalAdapter()`.
+  - Missing or invalid value: Aborts startup immediately with a `RuntimeError` detailing the misconfiguration.
 
 ### 4.2 Resource Shutdown
 On application shutdown, FastAPI's `lifespan` context manager invokes `adapter.close()`, ensuring all underlying HTTP client connection pools and file handles are released cleanly.

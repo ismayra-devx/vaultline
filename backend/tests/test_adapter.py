@@ -93,13 +93,138 @@ def test_fake_adapter_non_completed_statuses():
     )
     assert res_failed["status"] == "FAILED"
 
-def test_real_paypal_mode_fails_closed_when_unavailable(monkeypatch):
-    """When VAULTLINE_USE_REAL_PAYPAL=true, startup MUST fail if adapter cannot be loaded."""
-    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "true")
+def test_real_paypal_mode_fails_closed_on_import_error(monkeypatch):
+    """When VAULTLINE_USE_REAL_PAYPAL=true, startup MUST fail if adapter cannot be imported, and FakePaypalAdapter is never instantiated."""
+    import sys
     from backend.main import create_app
+
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "true")
+    monkeypatch.setitem(sys.modules, "backend.paypal.adapter", None)
+    monkeypatch.setitem(sys.modules, "backend.paypal", None)
+
+    fake_instantiated = []
+    orig_init = FakePaypalAdapter.__init__
+    def tracking_init(self, *args, **kwargs):
+        fake_instantiated.append(True)
+        return orig_init(self, *args, **kwargs)
+    monkeypatch.setattr(FakePaypalAdapter, "__init__", tracking_init)
+
     with pytest.raises(RuntimeError) as exc_info:
         create_app()
     assert "Real PayPal mode requested" in str(exc_info.value)
+    assert "failed to import PayPalSandboxAdapter" in str(exc_info.value)
+    assert len(fake_instantiated) == 0, "FakePaypalAdapter must NEVER be instantiated when import fails!"
+
+def test_real_paypal_mode_fails_closed_on_from_env_error(monkeypatch):
+    """When VAULTLINE_USE_REAL_PAYPAL=true, startup MUST fail if from_env() fails, and FakePaypalAdapter is never instantiated."""
+    import sys
+    import types
+    from backend.main import create_app
+
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "true")
+
+    dummy_module = types.ModuleType("backend.paypal.adapter")
+    class BrokenSandboxAdapter:
+        @classmethod
+        def from_env(cls):
+            raise ValueError("Simulated PayPal credentials error: missing PAYPAL_CLIENT_ID")
+    dummy_module.PayPalSandboxAdapter = BrokenSandboxAdapter
+    monkeypatch.setitem(sys.modules, "backend.paypal.adapter", dummy_module)
+
+    fake_instantiated = []
+    orig_init = FakePaypalAdapter.__init__
+    def tracking_init(self, *args, **kwargs):
+        fake_instantiated.append(True)
+        return orig_init(self, *args, **kwargs)
+    monkeypatch.setattr(FakePaypalAdapter, "__init__", tracking_init)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        create_app()
+    assert "Real PayPal mode requested" in str(exc_info.value)
+    assert "PayPalSandboxAdapter.from_env() initialization failed" in str(exc_info.value)
+    assert "Simulated PayPal credentials error" in str(exc_info.value)
+    assert len(fake_instantiated) == 0, "FakePaypalAdapter must NEVER be instantiated when from_env() fails!"
+
+def test_explicit_fake_mode(monkeypatch):
+    """VAULTLINE_USE_REAL_PAYPAL=false explicitly instantiates FakePaypalAdapter."""
+    from backend.main import create_app
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "false")
+    app = create_app()
+    assert isinstance(app.state.adapter, FakePaypalAdapter)
+
+def test_missing_or_invalid_paypal_mode_fails_startup(monkeypatch):
+    """Missing or unrecognized VAULTLINE_USE_REAL_PAYPAL values must fail startup."""
+    from backend.main import create_app
+
+    # Missing
+    monkeypatch.delenv("VAULTLINE_USE_REAL_PAYPAL", raising=False)
+    with pytest.raises(RuntimeError) as exc_missing:
+        create_app()
+    assert "must be explicitly configured" in str(exc_missing.value)
+
+    # Invalid
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "not_a_valid_boolean")
+    with pytest.raises(RuntimeError) as exc_invalid:
+        create_app()
+    assert "Invalid VAULTLINE_USE_REAL_PAYPAL value: 'not_a_valid_boolean'" in str(exc_invalid.value)
+
+def test_reconciliation_forwards_exact_persisted_paypal_request_id(test_config, temp_db_path):
+    """Reconciliation must read the persisted paypal_request_id and forward it exactly to the adapter."""
+    from backend.db import Database
+    from backend.services import VaultlineService
+
+    db = Database(temp_db_path)
+    db.init_schema()
+    db.seed_defaults(test_config)
+
+    forwarded_ids = []
+
+    class SpyAdapter(FakePaypalAdapter):
+        def refund_capture(self, paypal_request_id, capture_id, amount, currency="USD", **kwargs):
+            forwarded_ids.append(paypal_request_id)
+            if self.should_timeout:
+                raise TimeoutError("Simulated PayPal gateway timeout")
+            return super().refund_capture(paypal_request_id, capture_id, amount, currency, **kwargs)
+
+    adapter = SpyAdapter()
+    adapter.seed_capture("CAP_A", Decimal("300.00"), "USD", "COMPLETED")
+    adapter.set_timeout(True)
+
+    service = VaultlineService(db=db, adapter=adapter, config=test_config)
+
+    # Step 1: Initial auto-executed request times out, leaving status UNKNOWN
+    req = service.create_refund_request(
+        agent_id=test_config.agent_id,
+        capture_id="CAP_A",
+        amount=Decimal("5.00"),
+        currency="USD",
+        action="refund",
+    )
+    assert req.execution_status == "UNKNOWN"
+    assert len(forwarded_ids) == 1
+    initial_forwarded_id = forwarded_ids[0]
+
+    # Verify ID was persisted in executions table
+    conn = db.get_connection()
+    row = conn.execute("SELECT paypal_request_id, status FROM executions WHERE request_id = ?", (req.request_id,)).fetchone()
+    assert row is not None
+    persisted_id = row["paypal_request_id"]
+    assert persisted_id == initial_forwarded_id
+    assert row["status"] == "UNKNOWN"
+
+    # Step 2: Clear timeout and trigger reconciliation
+    adapter.set_timeout(False)
+    reconcile_res = service.reconcile_request(req.request_id)
+
+    assert reconcile_res.execution_status == "COMPLETED"
+    assert len(forwarded_ids) == 2
+    reconcile_forwarded_id = forwarded_ids[1]
+
+    # Assert that reconciliation forwarded the EXACT persisted paypal_request_id, NOT a new ID
+    assert reconcile_forwarded_id == persisted_id
+    assert reconcile_forwarded_id == initial_forwarded_id
+
+    db.close()
 
 def test_adapter_lifecycle_close_called():
     """Verify that adapter.close() is safely supported and called during app lifecycle."""

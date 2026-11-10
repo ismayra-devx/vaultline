@@ -75,29 +75,42 @@ def create_app(
     database.init_schema()
     database.seed_defaults(cfg)
 
-    if adapter:
+    if adapter is not None:
         paypal_adapter = adapter
-    elif os.getenv("VAULTLINE_USE_REAL_PAYPAL", "false").lower() in ("true", "1", "yes"):
-        try:
-            from backend.paypal.adapter import PayPalSandboxAdapter
-        except ImportError:
-            try:
-                from backend.paypal import PayPalSandboxAdapter
-            except ImportError as exc:
-                raise RuntimeError(
-                    "Real PayPal mode requested (VAULTLINE_USE_REAL_PAYPAL=true), "
-                    "but failed to import PayPalSandboxAdapter from 'backend.paypal.adapter' "
-                    f"or 'backend.paypal': {exc}"
-                ) from exc
-        try:
-            paypal_adapter = PayPalSandboxAdapter.from_env()
-        except Exception as exc:
-            raise RuntimeError(
-                f"Real PayPal mode requested (VAULTLINE_USE_REAL_PAYPAL=true), "
-                f"but PayPalSandboxAdapter.from_env() initialization failed: {exc}"
-            ) from exc
     else:
-        paypal_adapter = FakePaypalAdapter()
+        raw_mode = os.getenv("VAULTLINE_USE_REAL_PAYPAL")
+        if raw_mode is None or raw_mode.strip() == "":
+            raise RuntimeError(
+                "VAULTLINE_USE_REAL_PAYPAL must be explicitly configured: "
+                "set 'true' for real PayPal Sandbox adapter or 'false' for fake test double."
+            )
+        mode = raw_mode.strip().lower()
+        if mode in ("true", "1", "yes"):
+            try:
+                from backend.paypal.adapter import PayPalSandboxAdapter
+            except ImportError:
+                try:
+                    from backend.paypal import PayPalSandboxAdapter
+                except ImportError as exc:
+                    raise RuntimeError(
+                        "Real PayPal mode requested (VAULTLINE_USE_REAL_PAYPAL=true), "
+                        "but failed to import PayPalSandboxAdapter from 'backend.paypal.adapter' "
+                        f"or 'backend.paypal': {exc}"
+                    ) from exc
+            try:
+                paypal_adapter = PayPalSandboxAdapter.from_env()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Real PayPal mode requested (VAULTLINE_USE_REAL_PAYPAL=true), "
+                    f"but PayPalSandboxAdapter.from_env() initialization failed: {exc}"
+                ) from exc
+        elif mode in ("false", "0", "no"):
+            paypal_adapter = FakePaypalAdapter()
+        else:
+            raise RuntimeError(
+                f"Invalid VAULTLINE_USE_REAL_PAYPAL value: '{raw_mode}'. "
+                "Expected 'true' (real Sandbox) or 'false' (fake double)."
+            )
 
     # Seed default captures if supported (e.g. test doubles)
     if hasattr(paypal_adapter, "seed_capture"):
@@ -151,4 +164,7 @@ def create_app(
     return app
 
 # Default app instance for uvicorn
-app = create_app()
+try:
+    app = create_app()
+except RuntimeError:
+    app = None

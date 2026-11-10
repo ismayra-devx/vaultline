@@ -431,7 +431,7 @@ class VaultlineService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found.")
 
         pol_cur = conn.execute(
-            "SELECT * FROM policies WHERE merchant_id = ? ORDER BY created_at DESC LIMIT 1",
+            "SELECT * FROM policies WHERE merchant_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
             (agent_row["merchant_id"],),
         )
         pol = pol_cur.fetchone()

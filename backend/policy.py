@@ -21,6 +21,8 @@ def evaluate_refund_policy(
     amount: Decimal,
     currency: str = "USD",
     action: str = "refund",
+    max_auto_amount: Decimal = Decimal("10.00"),
+    max_escalate_amount: Decimal = Decimal("25.00"),
     ai_risk_flag: bool = False,
     ai_risk_explanation: Optional[str] = None,
     ai_signal_error: Optional[str] = None,
@@ -87,9 +89,9 @@ def evaluate_refund_policy(
         except Exception:
             reasons.append("Malformed capture balance data.")
 
-    # 6. Upper policy limit check ($25.00)
-    if amount > Decimal("25.00"):
-        reasons.append(f"Amount ${amount} exceeds maximum allowed policy limit ($25.00).")
+    # 6. Upper policy limit check ($25.00 default)
+    if amount > max_escalate_amount:
+        reasons.append(f"Amount ${amount} exceeds maximum allowed policy limit (${max_escalate_amount:.2f}).")
 
     # Ladder Evaluation
     if reasons:
@@ -102,15 +104,15 @@ def evaluate_refund_policy(
         )
 
     # All hard checks pass: test middle and lower rungs
-    if amount > Decimal("10.00") and amount <= Decimal("25.00"):
+    if amount > max_auto_amount and amount <= max_escalate_amount:
         decision = Decision.ESCALATE
-        reasons.append("Amount is between $10.01 and $25.00; requires merchant approval.")
+        reasons.append(f"Amount is between ${max_auto_amount + Decimal('0.01'):.2f} and ${max_escalate_amount:.2f}; requires merchant approval.")
         risk_summary = "Escalated for human judge approval due to amount threshold."
         approval_required = True
     else:
-        # amount <= $10.00
+        # amount <= max_auto_amount
         decision = Decision.ALLOW
-        reasons.append("Amount is <= $10.00 with all checks passing.")
+        reasons.append(f"Amount is <= ${max_auto_amount:.2f} with all checks passing.")
         risk_summary = "Low risk auto-approved refund."
         approval_required = False
 

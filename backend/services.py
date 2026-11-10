@@ -199,11 +199,18 @@ class VaultlineService:
 
         # 3. Fetch active policy
         pol_cur = conn.execute(
-            "SELECT version FROM policies WHERE merchant_id = ? ORDER BY rowid DESC LIMIT 1",
+            "SELECT * FROM policies WHERE merchant_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
             (merchant_id,),
         )
         pol_row = pol_cur.fetchone()
-        policy_version = pol_row["version"] if pol_row else "v1"
+        if pol_row:
+            policy_version = pol_row["version"]
+            max_auto_amount = Decimal(str(pol_row["max_auto_amount"]))
+            max_escalate_amount = Decimal(str(pol_row["max_escalate_amount"]))
+        else:
+            policy_version = "v1"
+            max_auto_amount = self.config.max_auto_amount
+            max_escalate_amount = self.config.max_escalate_amount
 
         # 4. Evaluate policy ladder
         eval_result = evaluate_refund_policy(
@@ -212,6 +219,8 @@ class VaultlineService:
             amount=amount,
             currency=currency,
             action=action,
+            max_auto_amount=max_auto_amount,
+            max_escalate_amount=max_escalate_amount,
             ai_risk_flag=ai_risk_flag,
             ai_risk_explanation=ai_risk_explanation,
             ai_signal_error=ai_signal_error,

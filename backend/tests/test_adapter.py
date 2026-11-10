@@ -152,6 +152,20 @@ def test_explicit_fake_mode(monkeypatch):
     app = create_app()
     assert isinstance(app.state.adapter, FakePaypalAdapter)
 
+def test_create_app_with_real_paypal_mode_success(monkeypatch):
+    """When VAULTLINE_USE_REAL_PAYPAL=true and PayPal env vars are valid, create_app instantiates PayPalSandboxAdapter."""
+    from backend.main import create_app
+    from backend.paypal.adapter import PayPalSandboxAdapter
+
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "true")
+    monkeypatch.setenv("PAYPAL_CLIENT_ID", "test_client_id")
+    monkeypatch.setenv("PAYPAL_CLIENT_SECRET", "test_client_secret")
+    monkeypatch.setenv("PAYPAL_BASE_URL", "https://api-m.sandbox.paypal.com")
+
+    app = create_app()
+    assert isinstance(app.state.adapter, PayPalSandboxAdapter)
+    app.state.adapter.close()
+
 def test_missing_or_invalid_paypal_mode_fails_startup(monkeypatch):
     """Missing or unrecognized VAULTLINE_USE_REAL_PAYPAL values must fail startup."""
     from backend.main import create_app

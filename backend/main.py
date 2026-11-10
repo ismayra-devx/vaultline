@@ -164,7 +164,4 @@ def create_app(
     return app
 
 # Default app instance for uvicorn
-try:
-    app = create_app()
-except RuntimeError:
-    app = None
+app = create_app()

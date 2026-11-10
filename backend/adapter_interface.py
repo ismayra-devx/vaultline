@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Protocol, runtime_checkable
 
 @dataclass(frozen=True)
 class CaptureResult:
-    """Normalized PayPal capture result (v2.0 contract)."""
+    """Normalized PayPal capture result."""
     capture_id: str
     status: str
     amount: Decimal
@@ -26,7 +26,7 @@ class CaptureResult:
 
 @dataclass(frozen=True)
 class RefundResult:
-    """Normalized PayPal refund result (v2.0 contract)."""
+    """Normalized PayPal refund result."""
     refund_id: str
     capture_id: Optional[str]
     status: str
@@ -45,41 +45,14 @@ class RefundResult:
         except AttributeError:
             return default
 
-@runtime_checkable
-class PayPalAdapter(Protocol):
-    """
-    Protocol definition for PayPal adapter (v2.0 architecture contract).
-    Used by P1 (Ismayra) and P2 (Ankit) for dependency injection.
-    """
-    async def get_capture(
-        self,
-        capture_id: str,
-    ) -> CaptureResult:
-        ...
-
-    async def refund_capture(
-        self,
-        capture_id: str,
-        amount: Decimal,
-        currency: str,
-        request_id: str,
-    ) -> RefundResult:
-        ...
-
-    async def get_refund(
-        self,
-        refund_id: str,
-    ) -> RefundResult:
-        ...
-
 class PaypalAdapter(ABC):
     """
-    Abstract interface for all PayPal communication.
-    Maintained for synchronous/ABC compatibility with existing callers.
+    Canonical abstract base class for all PayPal communication in Vaultline.
+    Synchronous execution contract for services.py, production adapter, and test doubles.
     """
 
     @abstractmethod
-    def get_capture(self, capture_id: str) -> Any:
+    def get_capture(self, capture_id: str) -> CaptureResult:
         """Fetches capture details from PayPal."""
         pass
 
@@ -89,15 +62,36 @@ class PaypalAdapter(ABC):
         paypal_request_id: str,
         capture_id: str,
         amount: Decimal,
-        currency: str,
-    ) -> Any:
+        currency: str = "USD",
+        **kwargs,
+    ) -> RefundResult:
         """
         Executes a capture refund using an idempotent paypal_request_id.
-        Returns normalized refund response.
+        Returns normalized RefundResult.
         """
         pass
 
     @abstractmethod
-    def get_refund(self, refund_id: str) -> Any:
+    def get_refund(self, refund_id: str) -> RefundResult:
         """Fetches status of an existing refund."""
         pass
+
+@runtime_checkable
+class PayPalAdapter(Protocol):
+    """
+    Structural Protocol alias for PayPal adapter.
+    Synchronous contract matching PaypalAdapter ABC.
+    """
+
+    def get_capture(self, capture_id: str) -> CaptureResult: ...
+
+    def refund_capture(
+        self,
+        paypal_request_id: str,
+        capture_id: str,
+        amount: Decimal,
+        currency: str = "USD",
+        **kwargs,
+    ) -> RefundResult: ...
+
+    def get_refund(self, refund_id: str) -> RefundResult: ...

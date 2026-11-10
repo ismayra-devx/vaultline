@@ -199,7 +199,7 @@ class VaultlineService:
 
         # 3. Fetch active policy
         pol_cur = conn.execute(
-            "SELECT version FROM policies WHERE merchant_id = ? ORDER BY created_at DESC LIMIT 1",
+            "SELECT version FROM policies WHERE merchant_id = ? ORDER BY rowid DESC LIMIT 1",
             (merchant_id,),
         )
         pol_row = pol_cur.fetchone()

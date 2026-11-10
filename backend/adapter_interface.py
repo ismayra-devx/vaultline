@@ -79,7 +79,6 @@ class PaypalAdapter(ABC):
     def close(self) -> None:
         """Closes any underlying network connections or HTTP clients. Default no-op."""
         pass
-
 # Deprecated for MVP: Aliased directly to PaypalAdapter to avoid competing contracts.
 # All production adapters and test doubles must implement PaypalAdapter.
 PayPalAdapter = PaypalAdapter

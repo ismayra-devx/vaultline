@@ -1,6 +1,60 @@
-# Vaultline Security Backend
+# Vaultline
 
-Vaultline is an authorization gateway between autonomous AI agents and PayPal. An AI agent can request a refund, but never holds PayPal credentials and cannot approve its own requests. The Vaultline backend evaluates requests against a policy ladder, deciding whether to `ALLOW`, `BLOCK`, or `ESCALATE` to a human judge. Only an isolated PayPal adapter may execute money movements.
+### AI Financial Security Infrastructure
+
+**Every agent has a limit. Every transaction needs authority.**
+
+Vaultline is a PayPal-first, MCP-native financial authorization gateway that enables AI agents to request financial actions within merchant-defined limits.
+
+AI agents can propose financial actions, but they cannot independently execute money-moving operations beyond their granted authority.
+
+---
+
+## Core Concept
+
+Vaultline acts as a security gateway between autonomous AI agents and PayPal.
+
+Every transaction passes through:
+1. Agent authentication
+2. Deterministic policy evaluation
+3. Risk assessment
+4. Merchant approval when required
+5. Transaction validation
+6. PayPal Sandbox execution
+7. Audit logging and status verification
+
+---
+
+## Policy Model
+
+| Refund amount | Decision |
+|---|---|
+| Up to $10.00 | ALLOW |
+| Above $10.00 up to $25.00 | ESCALATE |
+| Above $25.00 | BLOCK |
+
+Deterministic backend rules are authoritative. AI risk assessment may tighten a decision (`ALLOW` $\to$ `ESCALATE`) but must never override a `BLOCK` into an `ALLOW`.
+
+---
+
+## Architecture Flow
+
+```
+Agent → Vaultline MCP → FastAPI Security Gateway → Policy Engine → Approval Workflow → PayPal Adapter → PayPal Sandbox
+```
+
+The merchant dashboard provides visibility and approval controls. It is not the security boundary.
+
+---
+
+## Team Responsibilities
+
+| Role | Owner | Responsibility |
+|---|---|---|
+| **P1** | Ismayra | PayPal integration, hosting and release |
+| **P2** | Ankit | Security backend, authentication and policies |
+| **P3** | Mohd | MCP server, agent workflow, AI risk and audit |
+| **P4** | Mohd | Frontend, merchant dashboard and AG Studio |
 
 ---
 
@@ -25,6 +79,7 @@ pip install -r requirements.txt
 Start the FastAPI application with Uvicorn:
 
 ```bash
+# In fake/demo mode (default)
 uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -69,12 +124,11 @@ Upon startup, the database is initialized in WAL mode and seeded with safe test 
 
 - **Architecture Baseline**: Refer to [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the frozen synchronous contract and system architecture decisions.
 - **Security Invariants**: Refer to [backend/SECURITY_INVARIANTS.md](backend/SECURITY_INVARIANTS.md) for the 8 core security invariants:
-1. Money is `Decimal` / decimal strings only; schemas strictly reject floats.
-2. Identity comes only from credentials (`extra = "forbid"` blocks caller-supplied identity).
-3. Agent credentials and merchant sessions are strictly partitioned.
-4. Policy evaluation lives solely in `policy.py` and `services.py`.
-5. AI risk signals can only tighten `ALLOW` to `ESCALATE`.
-6. Money movements go strictly through the `PaypalAdapter` interface.
-7. Secrets are never stored in or read from `.env` files; secrets are redacted as `[REDACTED]`.
-8. Tests are never weakened, deleted, or skipped.
-
+  1. Money is `Decimal` / decimal strings only; schemas strictly reject floats.
+  2. Identity comes only from credentials (`extra = "forbid"` blocks caller-supplied identity).
+  3. Agent credentials and merchant sessions are strictly partitioned.
+  4. Policy evaluation lives solely in `policy.py` and `services.py`.
+  5. AI risk signals can only tighten `ALLOW` to `ESCALATE`.
+  6. Money movements go strictly through the `PaypalAdapter` interface.
+  7. Secrets are never stored in or read from `.env` files; secrets are redacted as `[REDACTED]`.
+  8. Tests are never weakened, deleted, or skipped.

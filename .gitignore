@@ -1,7 +1,18 @@
-# Byte-compiled / optimized / DLL files
+# Environment variables and secrets
+.env
+.env.*
+.env.local
+.env.*.local
+!.env.example
+
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
 *$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # SQLite databases
 *.db
@@ -10,14 +21,7 @@ __pycache__/
 *.sqlite
 *.sqlite3
 
-# Environments and Secrets
-.env
-.env.local
-.env.*.local
-!.env.example
-
-# Pytest and coverage
-.pytest_cache/
+# Test and coverage output
 .coverage
 htmlcov/
 
@@ -27,12 +31,21 @@ venv/
 env/
 ENV/
 
+# Node
+node_modules/
+dist/
+build/
+.next/
+
 # IDE and Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
 
+# OS files
+.DS_Store
+Thumbs.db
+
 # Logs
 *.log
-

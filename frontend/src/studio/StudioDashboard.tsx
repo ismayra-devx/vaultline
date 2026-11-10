@@ -8,15 +8,15 @@ import { ApprovalQueueWidget, AuditHealthWidget, DecisionBreakdownWidget } from 
 // Without a key Studio runs with a watermark — fine for local dev, set it for the judge build.
 const LICENSE = import.meta.env.VITE_AG_STUDIO_LICENSE_KEY as string | undefined;
 
-// Match Studio's own chrome (edit panels, menus, grids) to the dashboard's dark glass palette.
+// Match Studio's own chrome (edit panels, menus, grids) to the dashboard's light ledger palette.
 const vaultTheme = studioTheme.withParams({
-  browserColorScheme: 'dark',
-  backgroundColor: '#0e1328',
-  chromeBackgroundColor: '#0b1022',
-  foregroundColor: '#e6eaff',
-  accentColor: '#8b7cff',
-  borderColor: 'rgba(150, 170, 255, 0.16)',
-  fontFamily: "'Manrope', system-ui, sans-serif",
+  browserColorScheme: 'light',
+  backgroundColor: '#ffffff',
+  chromeBackgroundColor: '#f7f3f0',
+  foregroundColor: '#2a1f24',
+  accentColor: '#970747',
+  borderColor: '#ddd0c8',
+  fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
   studioWrapperBackgroundColor: 'transparent',
   studioWrapperBorder: 'none',
 } as never);
@@ -35,7 +35,7 @@ const def = (id: string, label: string, comp: () => React.JSX.Element, w: number
 const customWidgets: any[] = [
   def('vaultlineDecisions', 'Decision breakdown', DecisionBreakdownWidget, 6, 7),
   def('vaultlineApprovals', 'Approval queue', ApprovalQueueWidget, 6, 7),
-  def('vaultlineAudit', 'Audit health', AuditHealthWidget, 12, 3),
+  def('vaultlineAudit', 'Audit health', AuditHealthWidget, 12, 4),
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,19 +59,19 @@ const initialState = {
       },
       layout: {
         columns: 12, rowHeight: 48, widgetPadding: 0,
-        backgroundColor: 'transparent', widgetBackgroundColor: 'rgba(20, 26, 48, 0.62)',
-        widgetBorderEnabled: true, widgetBorderColor: 'rgba(150, 170, 255, 0.16)', widgetBorderWidth: 1, widgetBorderRadius: 18,
+        backgroundColor: 'transparent', widgetBackgroundColor: '#ffffff',
+        widgetBorderEnabled: true, widgetBorderColor: '#ddd0c8', widgetBorderWidth: 1, widgetBorderRadius: 6,
       },
       widgetLayout: {
         decisions: { xTrack: 0, yTrack: 0, xSpan: 6, ySpan: 7 },
         approvals: { xTrack: 6, yTrack: 0, xSpan: 6, ySpan: 7 },
-        audit: { xTrack: 0, yTrack: 7, xSpan: 12, ySpan: 3 },
+        audit: { xTrack: 0, yTrack: 7, xSpan: 12, ySpan: 4 },
       },
     },
   ],
 };
 
-const NARROW = '(max-width: 760px)';
+const NARROW = '(max-width: 1100px)'; // below this the Studio canvas + filter panel crowd the widgets
 function useNarrow() {
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(NARROW).matches);
   useEffect(() => {

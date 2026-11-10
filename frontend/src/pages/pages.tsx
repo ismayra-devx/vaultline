@@ -216,9 +216,15 @@ export function LoginPage({ onDone }: { onDone: () => void }) {
   }
   return (
     <main className="login">
+      <aside className="login-aside">
+        <div className="brand"><BrandMark />Vaultline</div>
+        <h1>Every agent has a limit.</h1>
+        <p className="login-note">Approve or block what your AI agents try to refund. Every decision is policy-checked and recorded in a tamper-evident audit chain.</p>
+      </aside>
+      <div className="login-main">
       <form onSubmit={submit} className="login-card">
-        <div className="brand big"><BrandMark />Vaultline</div>
-        <p className="muted small">Approve or block what your AI agents try to refund. Connected to PayPal Sandbox.</p>
+        <h2>Merchant sign in</h2>
+        <p className="muted small">Connected to PayPal Sandbox.</p>
         <label>Username<input autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} required /></label>
         <label>Password<input type="password" autoComplete="current-password" value={p} onChange={(e) => setP(e.target.value)} required /></label>
         {showApi ? (
@@ -230,6 +236,7 @@ export function LoginPage({ onDone }: { onDone: () => void }) {
         <button className="btn btn-primary" disabled={busy}>{busy ? 'Signing in… (free servers can take a minute to wake)' : 'Sign in'}</button>
         <p className="muted tiny">Merchant login only. Agent keys cannot sign in here, and this page never sees PayPal credentials.</p>
       </form>
+      </div>
     </main>
   );
 }

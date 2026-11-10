@@ -22,7 +22,6 @@ export default function App() {
   // Route guards are UX only — every merchant route is enforced by the backend.
   return (
     <>
-      <div className="aurora" aria-hidden />
       {!signedIn ? (
         <LoginPage onDone={() => setSignedIn(true)} />
       ) : (
@@ -45,7 +44,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
     return () => removeEventListener('hashchange', h);
   }, []);
   const pending = (requests.data ?? []).filter((r) => r.status === 'AWAITING_APPROVAL').length;
-  // The vault line under the top bar brightens briefly whenever the backend reports something new.
+  // The live indicator rings briefly whenever the backend reports something new.
   const signature = JSON.stringify((requests.data ?? []).map((r) => [r.request_id, r.status, r.execution_status]));
   const [fresh, setFresh] = useState(false);
   const last = useRef<string | null>(null);
@@ -74,7 +73,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           ))}
         </nav>
         <div className="who">
-          <span className={`live ${live ? 'on' : ''}`} title={live ? 'Polling backend every 2s' : 'Backend unreachable'}>{live ? 'Live' : 'Reconnecting'}</span>
+          <span className={`live ${live ? 'on' : ''}`} title={live ? 'Polling backend every 2s' : 'Backend unreachable'} role="status">{live ? 'Live' : 'Reconnecting'}</span>
           <button className="btn btn-ghost" onClick={() => setAnalyst((v) => !v)} aria-expanded={analyst}>Analyst</button>
           <span className="small muted who-name">Merchant</span>
           <button className="btn btn-ghost" onClick={onLogout}>Sign out</button>
@@ -82,6 +81,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
       </header>
       <div className={`body ${analyst ? 'with-analyst' : ''}`}>
         <main className="content">
+          <h1 className="page-title">{ROUTES.find((r) => r.id === route)!.label}</h1>
           {route === 'dashboard' && (
             <Suspense fallback={<Loading label="Loading AG Studio…" />}>
               <StudioDashboard />

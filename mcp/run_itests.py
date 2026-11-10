@@ -5,13 +5,14 @@ import time
 import httpx
 
 def main():
-    port = 8008
-    base_url = f"http://127.0.0.1:{port}"
-    agent_key = "vl_agent_secret_key_abc123"
+    port = int(os.getenv("VAULTLINE_TEST_PORT", "8008"))
+    base_url = os.getenv("VAULTLINE_TEST_API_BASE_URL", f"http://127.0.0.1:{port}")
+    agent_key = os.getenv("VAULTLINE_TEST_AGENT_KEY") or os.getenv("VAULTLINE_AGENT_KEY", "vl_agent_secret_key_abc123")
 
     backend_env = os.environ.copy()
     backend_env["VAULTLINE_USE_REAL_PAYPAL"] = "false"
-    backend_env["VAULTLINE_DB_PATH"] = "vaultline_itest.db"
+    backend_env["VAULTLINE_AGENT_KEY"] = agent_key
+    backend_env["VAULTLINE_DB_PATH"] = os.getenv("VAULTLINE_DB_PATH", "vaultline_itest.db")
 
     # Clean previous itest db if present
     for fname in ["vaultline_itest.db", "vaultline_itest.db-wal", "vaultline_itest.db-shm"]:

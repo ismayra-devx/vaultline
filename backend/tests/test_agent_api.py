@@ -193,3 +193,85 @@ def test_get_agent_policy(client, agent_headers):
     assert data["max_auto_amount"] == "10.00"
     assert data["max_escalate_amount"] == "25.00"
 
+def test_dynamic_policy_thresholds_reflected_in_endpoint_and_decisions(client, agent_headers, test_db, test_config):
+    """Updating policy thresholds in the database immediately updates the policy endpoint and live decisions."""
+    # Step 1: Initial baseline under v1 (auto <= $10, escalate <= $25, block > $25)
+    pol_res = client.get("/api/v1/agents/me/policy", headers=agent_headers)
+    assert pol_res.status_code == 200
+    assert pol_res.json()["max_auto_amount"] == "10.00"
+    assert pol_res.json()["max_escalate_amount"] == "25.00"
+
+    # $15 refund escalates
+    r1 = client.post(
+        "/api/v1/refunds",
+        json={"capture_id": "CAP_A", "amount": "15.00", "currency": "USD", "reason": "Baseline 15"},
+        headers=agent_headers,
+    )
+    assert r1.status_code == 200
+    assert r1.json()["decision"] == "ESCALATE"
+
+    # $30 refund blocks
+    r2 = client.post(
+        "/api/v1/refunds",
+        json={"capture_id": "CAP_A", "amount": "30.00", "currency": "USD", "reason": "Baseline 30"},
+        headers=agent_headers,
+    )
+    assert r2.status_code == 200
+    assert r2.json()["decision"] == "BLOCK"
+
+    # Step 2: Dynamically bump policy in database (v2: auto <= $20, escalate <= $50, block > $50)
+    conn = test_db.get_connection()
+    conn.execute(
+        """
+        INSERT INTO policies (id, version, merchant_id, max_auto_amount, max_escalate_amount, currency, created_at)
+        VALUES ('pol_v2', 'v2', ?, '20.00', '50.00', 'USD', '2026-11-11T03:00:00Z')
+        """,
+        (test_config.merchant_id,),
+    )
+    conn.commit()
+
+    # Step 3: Verify GET /api/v1/agents/me/policy reflects updated v2 thresholds
+    pol_res_v2 = client.get("/api/v1/agents/me/policy", headers=agent_headers)
+    assert pol_res_v2.status_code == 200
+    assert pol_res_v2.json()["version"] == "v2"
+    assert pol_res_v2.json()["max_auto_amount"] == "20.00"
+    assert pol_res_v2.json()["max_escalate_amount"] == "50.00"
+
+    # Step 4: Verify live refund decisions reflect updated v2 thresholds
+    # $15 is now <= $20 -> ALLOW (previously ESCALATE)
+    r3 = client.post(
+        "/api/v1/refunds",
+        json={"capture_id": "CAP_B", "amount": "15.00", "currency": "USD", "reason": "V2 auto 15"},
+        headers=agent_headers,
+    )
+    assert r3.status_code == 200
+    assert r3.json()["decision"] == "ALLOW"
+    assert r3.json()["execution_status"] == "COMPLETED"
+
+    # $30 is now > $20 and <= $50 -> ESCALATE (previously BLOCKED)
+    r4 = client.post(
+        "/api/v1/refunds",
+        json={"capture_id": "CAP_B", "amount": "30.00", "currency": "USD", "reason": "V2 escalate 30"},
+        headers=agent_headers,
+    )
+    assert r4.status_code == 200
+    assert r4.json()["decision"] == "ESCALATE"
+    assert r4.json()["approval_required"] is True
+
+    # $60 is > $50 -> BLOCK
+    r5 = client.post(
+        "/api/v1/refunds",
+        json={"capture_id": "CAP_B", "amount": "60.00", "currency": "USD", "reason": "V2 block 60"},
+        headers=agent_headers,
+    )
+    assert r5.status_code == 200
+    assert r5.json()["decision"] == "BLOCK"
+
+    # Step 5: Verify policy_version 'v2' is recorded in the action_requests database rows
+    row_r3 = conn.execute("SELECT policy_version FROM action_requests WHERE id = ?", (r3.json()["request_id"],)).fetchone()
+    assert row_r3["policy_version"] == "v2"
+    row_r4 = conn.execute("SELECT policy_version FROM action_requests WHERE id = ?", (r4.json()["request_id"],)).fetchone()
+    assert row_r4["policy_version"] == "v2"
+    row_r5 = conn.execute("SELECT policy_version FROM action_requests WHERE id = ?", (r5.json()["request_id"],)).fetchone()
+    assert row_r5["policy_version"] == "v2"
+

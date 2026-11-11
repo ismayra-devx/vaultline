@@ -224,7 +224,7 @@ def test_dynamic_policy_thresholds_reflected_in_endpoint_and_decisions(client, a
     conn.execute(
         """
         INSERT INTO policies (id, version, merchant_id, max_auto_amount, max_escalate_amount, currency, created_at)
-        VALUES ('pol_v2', 'v2', ?, '20.00', '50.00', 'USD', '2026-11-11T03:00:00Z')
+        VALUES ('pol_v2', 'v2', ?, '20.00', '50.00', 'USD', '2099-01-01T00:00:00Z')
         """,
         (test_config.merchant_id,),
     )

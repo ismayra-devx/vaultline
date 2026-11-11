@@ -151,6 +151,32 @@ def create_app(
     # Middleware
     app.add_middleware(PureASGICorrelationMiddleware)
 
+    cors_origins_raw = os.getenv("VAULTLINE_ALLOWED_ORIGINS", "").strip()
+    if cors_origins_raw == "*":
+        allowed_origins = ["*"]
+    elif cors_origins_raw:
+        allowed_origins = [o.strip().rstrip("/") for o in cors_origins_raw.split(",") if o.strip()]
+    else:
+        allowed_origins = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ]
+
+    from fastapi.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Session-Token", "X-Request-ID", "Accept"],
+    )
+
     # Health check
     @app.get("/health", tags=["Health"])
     def health_check():

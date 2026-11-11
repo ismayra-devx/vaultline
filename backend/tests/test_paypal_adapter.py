@@ -509,18 +509,64 @@ def test_refund_capture_missing_id_or_status_raises_timeout_error(payload: dict)
 
 
 @pytest.mark.parametrize(
+    "allowed_host",
+    [
+        "api-m.sandbox.paypal.com",
+        "api.sandbox.paypal.com",
+    ],
+)
+def test_get_refund_accepts_allowed_sandbox_hateoas_hosts(allowed_host: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/oauth2/token":
+            return _oauth_ok()
+        return httpx.Response(
+            200,
+            json={
+                "id": "REF_HOST_OK",
+                "status": "COMPLETED",
+                "amount": {"value": "10.00", "currency_code": "USD"},
+                "links": [
+                    {
+                        "href": f"https://{allowed_host}/v2/payments/captures/CAP_ALLOWED_42",
+                        "rel": "up",
+                        "method": "GET",
+                    },
+                ],
+            },
+        )
+
+    adapter = _build_adapter(handler)
+    result = adapter.get_refund("REF_HOST_OK")
+    assert result.capture_id == "CAP_ALLOWED_42"
+
+
+@pytest.mark.parametrize(
     "untrusted_href",
     [
         "https://evil.example.com/v2/payments/captures/CAP_EVIL",
         "https://api-m.paypal.com/v2/payments/captures/CAP_PROD",
+        "https://api.paypal.com/v2/payments/captures/CAP_PROD2",
+        "https://api.sandbox.paypal.com.evil.com/v2/payments/captures/CAP_LOOKALIKE1",
+        "https://evil-api.sandbox.paypal.com/v2/payments/captures/CAP_LOOKALIKE2",
+        "https://api-sandbox.paypal.com/v2/payments/captures/CAP_LOOKALIKE3",
+        "https://api.sandbox-paypal.com/v2/payments/captures/CAP_LOOKALIKE4",
         "https://api-m.sandbox.paypal.com:8443/v2/payments/captures/CAP_PORT",
+        "https://api.sandbox.paypal.com:8443/v2/payments/captures/CAP_PORT2",
+        "https://api.sandbox.paypal.com:443/v2/payments/captures/CAP_PORT443",
         "http://api-m.sandbox.paypal.com/v2/payments/captures/CAP_HTTP",
+        "http://api.sandbox.paypal.com/v2/payments/captures/CAP_HTTP2",
         "https://user:pass@api-m.sandbox.paypal.com/v2/payments/captures/CAP_CRED",
+        "https://user:pass@api.sandbox.paypal.com/v2/payments/captures/CAP_CRED2",
         "https://api-m.sandbox.paypal.com/v1/payments/captures/CAP_V1",
+        "https://api.sandbox.paypal.com/v1/payments/captures/CAP_V1_2",
         "https://api-m.sandbox.paypal.com/v2/payments/captures/CAP_Q?override=1",
+        "https://api.sandbox.paypal.com/v2/payments/captures/CAP_Q2?override=1",
         "https://api-m.sandbox.paypal.com/v2/payments/captures/CAP_F#frag",
+        "https://api.sandbox.paypal.com/v2/payments/captures/CAP_F2#frag",
         "https://api-m.sandbox.paypal.com/v2/payments/captures/CAP_EXTRA/refund",
+        "https://api.sandbox.paypal.com/v2/payments/captures/CAP_EXTRA2/refund",
         "https://api-m.sandbox.paypal.com/v2/payments/captures/",
+        "https://api.sandbox.paypal.com/v2/payments/captures/",
         "not-a-valid-url",
     ],
 )
@@ -542,6 +588,32 @@ def test_get_refund_rejects_untrusted_or_malformed_hateoas_links(untrusted_href:
 
     adapter = _build_adapter(handler)
     result = adapter.get_refund("REF_LINK_TEST")
+    assert result.capture_id is None
+
+
+@pytest.mark.parametrize("rel_value", ["self", "alternate", "next", ""])
+def test_get_refund_ignores_non_up_hateoas_links(rel_value: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/oauth2/token":
+            return _oauth_ok()
+        return httpx.Response(
+            200,
+            json={
+                "id": "REF_REL_TEST",
+                "status": "COMPLETED",
+                "amount": {"value": "10.00", "currency_code": "USD"},
+                "links": [
+                    {
+                        "href": "https://api.sandbox.paypal.com/v2/payments/captures/CAP_IGNORED",
+                        "rel": rel_value,
+                        "method": "GET",
+                    },
+                ],
+            },
+        )
+
+    adapter = _build_adapter(handler)
+    result = adapter.get_refund("REF_REL_TEST")
     assert result.capture_id is None
 
 

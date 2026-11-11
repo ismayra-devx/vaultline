@@ -1852,3 +1852,23 @@ body {
 .w-queue > .state {
   margin-top: -28px;
 }
+
+/* Statuses read as plain text: no capsule, no tint, no dot, no colour. The decision is already
+   in the word itself, and a page of coloured pills competes with the numbers that matter. */
+.badge {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-weight: 600;
+  color: var(--ink);
+}
+.badge::before {
+  content: none;
+}
+.tone-ok,
+.tone-bad,
+.tone-warn,
+.tone-info {
+  color: var(--ink);
+  background: none;
+}

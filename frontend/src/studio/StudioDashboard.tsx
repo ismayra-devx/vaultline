@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { AgStudio, AgStudioProvider, createWidgets } from 'ag-studio-react';
 import { studioTheme } from 'ag-studio';
 import { useData } from '../lib/data';
-import { InfoIcon } from '../components/ui';
 import { ApprovalQueueWidget, AuditHealthWidget, DecisionBreakdownWidget } from './widgets';
 
 // AG Studio licence keys are designed to ship in client bundles (not a secret).
@@ -85,17 +84,12 @@ function useNarrow() {
   return narrow;
 }
 
-const Intro = () => (
-  <p className="intro"><InfoIcon />Live view of every refund your agents attempt. Built on AG Studio; use Edit dashboard to add your own charts.</p>
-);
-
 export function StudioDashboard() {
   const narrow = useNarrow();
   // On phones the Studio canvas and its side panels are too cramped, so the same widgets stack natively.
   if (narrow) {
     return (
       <div className="mobile-stack">
-        <Intro />
         <DecisionBreakdownWidget />
         <ApprovalQueueWidget />
         <AuditHealthWidget />
@@ -136,7 +130,6 @@ function StudioCanvas() {
   return (
     <AgStudioProvider licenseKey={LICENSE}>
       <div className="studio-bar">
-        <Intro />
         <button className="btn btn-primary btn-pill" aria-pressed={mode === 'edit'} onClick={() => setMode((m) => (m === 'view' ? 'edit' : 'view'))}>
           {mode === 'view' ? 'Edit dashboard' : 'Done editing'}
         </button>

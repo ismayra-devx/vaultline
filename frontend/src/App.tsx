@@ -2,9 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { api, hasSession, USING_FIXTURES } from './api/client';
 import { BrandMark, Loading, SilkBackground } from './components/ui';
 import { DataProvider, useData } from './lib/data';
-import { ActivityPage, AnalystPanel, ApprovalsPage, LoginPage, RequestsPage } from './pages/pages';
+import { ActivityPage, ApprovalsPage, LoginPage, RequestsPage } from './pages/pages';
 
-// Studio is heavy; load it only for the dashboard route.
 const StudioDashboard = lazy(() => import('./studio/StudioDashboard').then((m) => ({ default: m.StudioDashboard })));
 
 type Route = 'dashboard' | 'requests' | 'approvals' | 'activity';
@@ -37,7 +36,6 @@ export default function App() {
 function Shell({ onLogout }: { onLogout: () => void }) {
   const [route, setRoute] = useState<Route>(readHash);
   const [focus, setFocus] = useState<string | null>(null);
-  const [analyst, setAnalyst] = useState(false);
   const { requests } = useData();
   useEffect(() => {
     const h = () => setRoute(readHash());
@@ -73,17 +71,15 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           ))}
         </nav>
         <div className="who">
-          
-          <button className="link" onClick={() => setAnalyst((v) => !v)} aria-expanded={analyst}>Analyst</button>
           <span className="who-name">Merchant</span>
           <button className="link" onClick={onLogout}>Sign out</button>
         </div>
       </header>
-      <div className={`body ${analyst ? 'with-analyst' : ''}`}>
+      <div className="body">
         <main className="content">
           <h1 className="sr-only">{ROUTES.find((r) => r.id === route)!.label}</h1>
           {route === 'dashboard' && (
-            <Suspense fallback={<Loading label="Loading AG Studio…" />}>
+            <Suspense fallback={<Loading label="Loading dashboard…" />}>
               <StudioDashboard />
             </Suspense>
           )}
@@ -91,7 +87,6 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           {route === 'approvals' && <ApprovalsPage />}
           {route === 'activity' && <ActivityPage key={focus ?? ''} focus={focus} />}
         </main>
-        {analyst && <AnalystPanel />}
       </div>
     </div>
   );

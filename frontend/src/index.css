@@ -371,42 +371,24 @@ textarea {
 }
 
 /* ---------- Badges & tones ---------- */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
+/* Statuses (Approved/Escalated/Blocked, ALLOW/ESCALATE/BLOCK) = plain body-colour text.
+   No pill, background, tint, dot or status colour. One CSS rule, not per-component edits. */
+.badge,
+.badge[class*="tone-"],
+.badge::before {
+  display: inline !important;
+  background: transparent !important;
+  color: inherit !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  font-weight: inherit !important;
+  font-size: inherit !important;
+  box-shadow: none !important;
 }
 .badge::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.tone-ok {
-  color: var(--ok);
-  background: var(--ok-tint);
-}
-.tone-bad {
-  color: var(--bad);
-  background: var(--bad-tint);
-}
-.tone-warn {
-  color: var(--warn);
-  background: var(--warn-tint);
-}
-.tone-info {
-  color: var(--info);
-  background: var(--info-tint);
-}
-.tone-muted {
-  color: var(--muted);
-  background: var(--tile);
+  display: none !important;
+  content: none !important;
 }
 .tone-text-ok {
   color: var(--ok);
@@ -744,6 +726,16 @@ tbody tr:focus-visible {
   color: var(--ink);
   cursor: pointer;
   overflow-wrap: anywhere;
+}
+.side-item .mono,
+.side-item .side-item-id,
+.side-item-id,
+.req-serif {
+  font-family: "Times New Roman", Times, serif !important;
+}
+.side-item-cust {
+  font-weight: 600;
+  margin-bottom: 2px;
 }
 .side-item:hover {
   background: var(--tile);
@@ -1851,4 +1843,265 @@ body {
 /* centre the approvals empty state in the card, level with the hero card text */
 .w-queue > .state {
   margin-top: -28px;
+}
+
+/* ---------- Card Dashboard Layout (Row 1, Row 2, Row 3) ---------- */
+.card-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: 4px 0 32px 0;
+}
+
+.dash-row-1 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap);
+}
+
+.dash-card {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: var(--shadow);
+}
+
+.dash-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dash-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.dash-card-count {
+  font-size: 38px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.1;
+  margin: 4px 0;
+}
+
+.dash-card-sub {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.dash-card-link {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--burgundy);
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dash-card-link:hover {
+  text-decoration: underline;
+}
+
+.dash-strip {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  box-shadow: var(--shadow);
+}
+
+.dash-strip-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.dash-strip-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.dash-strip-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.dash-strip-divider {
+  width: 1px;
+  height: 38px;
+  background: var(--line);
+}
+
+.dash-row-3 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--gap);
+}
+
+.dash-panel {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: var(--shadow);
+}
+
+.dash-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dash-panel-head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.dash-panel-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--burgundy);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.dash-panel-link:hover {
+  text-decoration: underline;
+}
+
+.customer-name-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--burgundy);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: left;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.customer-name-link:hover {
+  color: var(--burgundy-lift);
+}
+
+.pending-approvals-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pending-approval-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--tile);
+  border-radius: var(--r-sm);
+  transition: background 0.15s ease;
+}
+
+.pending-approval-item.selected-item,
+.dash-table tr.selected-row {
+  background: rgba(127, 3, 3, 0.08);
+}
+
+.pending-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pending-item-amount {
+  font-size: 15px;
+}
+
+.dash-details-section {
+  margin-top: 12px;
+}
+
+.transaction-info-panel {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.transaction-info-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.transaction-info-head h3 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.transaction-meta-note {
+  margin: 10px 0 0 0;
+}
+
+.transaction-audit-trail {
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.transaction-audit-title {
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.clickable-cell {
+  cursor: pointer;
+}
+
+@media (max-width: 950px) {
+  .dash-row-1 {
+    grid-template-columns: 1fr;
+  }
+  .dash-strip {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .dash-strip-divider {
+    display: none;
+  }
+  .dash-row-3 {
+    grid-template-columns: 1fr;
+  }
 }

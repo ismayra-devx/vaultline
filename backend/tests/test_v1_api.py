@@ -23,6 +23,7 @@ def app_and_deps(tmp_path):
         max_escalate_amount=Decimal("25.00"),
         currency="USD",
         approval_expiry_seconds=900,
+        demo_mode=True,
     )
     db = Database(db_file)
     db.init_schema()

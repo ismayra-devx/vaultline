@@ -27,6 +27,8 @@ def main():
 
     backend_env = os.environ.copy()
     backend_env["VAULTLINE_USE_REAL_PAYPAL"] = "false"
+    backend_env["VAULTLINE_DEMO_MODE"] = "true"
+    backend_env["APP_ENV"] = "test"
     backend_env["VAULTLINE_AGENT_KEY"] = agent_key
     backend_env["VAULTLINE_DB_PATH"] = db_path
 

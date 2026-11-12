@@ -1,5 +1,9 @@
 import os
 os.environ.setdefault("VAULTLINE_USE_REAL_PAYPAL", "false")
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("VAULTLINE_JUDGE_USERNAME", "judge_test_runner")
+os.environ.setdefault("VAULTLINE_JUDGE_PASSWORD", "secure_judge_test_pass_12345!")
+os.environ.setdefault("VAULTLINE_AGENT_KEY", "test_agent_secret_key_123456789")
 import tempfile
 import pytest
 from decimal import Decimal
@@ -39,6 +43,7 @@ def test_config(temp_db_path):
         judge_password="secure_judge_test_pass_123!",
         agent_id="agent_test_1",
         agent_key="test_agent_secret_key_789",
+        demo_mode=True,
     )
 
 @pytest.fixture

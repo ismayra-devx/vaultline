@@ -70,13 +70,31 @@ def create_app(
     adapter: Optional[PaypalAdapter] = None,
     service: Optional[VaultlineService] = None,
 ) -> FastAPI:
-    cfg = config or Config()
-    database = db or Database(cfg.db_path)
-    database.init_schema()
-    database.seed_defaults(cfg)
+    # 1. Environment & deployment validation
+    deployment = os.getenv("VAULTLINE_DEPLOYMENT", "").strip().lower()
+    app_env = os.getenv("APP_ENV", "development").strip().lower()
+    if app_env and app_env not in ("production", "prod", "development", "dev", "test"):
+        raise RuntimeError(
+            f"Invalid APP_ENV value: '{app_env}'. Expected 'production', 'development', or 'test'."
+        )
+    is_production = app_env in ("production", "prod")
 
+    demo_mode_env = os.getenv("VAULTLINE_DEMO_MODE", "").strip().lower()
+    is_demo_mode = (config.demo_mode if config else False) or (demo_mode_env in ("true", "1", "yes"))
+
+    # Safeguard 3: For hosted deployment (Render / judge environment), require real PayPal
+    if deployment == "hosted":
+        raw_paypal_mode = os.getenv("VAULTLINE_USE_REAL_PAYPAL", "").strip().lower()
+        if raw_paypal_mode not in ("true", "1", "yes"):
+            raise RuntimeError(
+                "In hosted deployment (VAULTLINE_DEPLOYMENT=hosted), VAULTLINE_USE_REAL_PAYPAL must be 'true'. "
+                "Fake adapter mode is strictly prohibited in the hosted judge environment."
+            )
+
+    # 2. PayPal mode validation
     if adapter is not None:
         paypal_adapter = adapter
+        is_real_paypal = not isinstance(adapter, FakePaypalAdapter)
     else:
         raw_mode = os.getenv("VAULTLINE_USE_REAL_PAYPAL")
         if raw_mode is None or raw_mode.strip() == "":
@@ -86,6 +104,35 @@ def create_app(
             )
         mode = raw_mode.strip().lower()
         if mode in ("true", "1", "yes"):
+            is_real_paypal = True
+        elif mode in ("false", "0", "no"):
+            is_real_paypal = False
+        else:
+            raise RuntimeError(
+                f"Invalid VAULTLINE_USE_REAL_PAYPAL value: '{raw_mode}'. "
+                "Expected 'true' (real Sandbox) or 'false' (fake double)."
+            )
+
+    # Contradiction check: demo mode cannot be enabled with real PayPal or in production
+    if is_demo_mode and (is_production or is_real_paypal):
+        raise RuntimeError(
+            "Contradictory configuration: demo mode (VAULTLINE_DEMO_MODE=true) "
+            "cannot be enabled in production or with real PayPal adapter."
+        )
+
+    effective_demo_mode = is_demo_mode and not is_real_paypal and not is_production
+
+    # 3. Credential validation (FAIL CLOSED BEFORE TOUCHING DATABASE)
+    cfg = config or Config(demo_mode=effective_demo_mode)
+    cfg.validate_credentials(
+        is_production=is_production,
+        is_real_paypal=is_real_paypal,
+        is_demo_mode=effective_demo_mode,
+    )
+
+    # 4. Instantiate PayPal adapter if not passed
+    if adapter is None:
+        if is_real_paypal:
             try:
                 from backend.paypal.adapter import PayPalSandboxAdapter
             except ImportError:
@@ -104,16 +151,16 @@ def create_app(
                     f"Real PayPal mode requested (VAULTLINE_USE_REAL_PAYPAL=true), "
                     f"but PayPalSandboxAdapter.from_env() initialization failed: {exc}"
                 ) from exc
-        elif mode in ("false", "0", "no"):
-            paypal_adapter = FakePaypalAdapter()
         else:
-            raise RuntimeError(
-                f"Invalid VAULTLINE_USE_REAL_PAYPAL value: '{raw_mode}'. "
-                "Expected 'true' (real Sandbox) or 'false' (fake double)."
-            )
+            paypal_adapter = FakePaypalAdapter()
 
-    # Seed default captures if supported (e.g. test doubles)
-    if hasattr(paypal_adapter, "seed_capture"):
+    # 5. Database initialization and seeding (ONLY RUNS AFTER ALL CHECKS PASS)
+    database = db or Database(cfg.db_path)
+    database.init_schema()
+    database.seed_defaults(cfg, demo_mode=effective_demo_mode)
+
+    # Seed default captures on fake adapter if demo mode is active
+    if hasattr(paypal_adapter, "seed_capture") and effective_demo_mode:
         paypal_adapter.seed_capture("CAP_A", Decimal("300.00"), "USD", "COMPLETED")
         paypal_adapter.seed_capture("CAP_B", Decimal("300.00"), "USD", "COMPLETED")
         paypal_adapter.seed_capture("CAP_C", Decimal("300.00"), "USD", "COMPLETED")

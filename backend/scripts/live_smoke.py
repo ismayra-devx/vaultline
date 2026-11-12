@@ -3,9 +3,13 @@ import sys
 import requests
 
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-AGENT_API_KEY = os.getenv("AGENT_API_KEY", "vl_agent_secret_key_abc123")
-MERCHANT_USER = os.getenv("MERCHANT_EMAIL") or os.getenv("MERCHANT_USERNAME", "judge_merchant")
-MERCHANT_PASSWORD = os.getenv("MERCHANT_PASSWORD", "vaultline_judge_password_123!")
+AGENT_API_KEY = os.getenv("AGENT_API_KEY") or os.getenv("VAULTLINE_AGENT_KEY", "vl_agent_secret_key_abc123")
+MERCHANT_USER = (
+    os.getenv("MERCHANT_EMAIL")
+    or os.getenv("MERCHANT_USERNAME")
+    or os.getenv("VAULTLINE_JUDGE_USERNAME", "judge_merchant")
+)
+MERCHANT_PASSWORD = os.getenv("MERCHANT_PASSWORD") or os.getenv("VAULTLINE_JUDGE_PASSWORD", "vaultline_judge_password_123!")
 
 def log_result(check_name: str, passed: bool, detail: str = ""):
     status_str = "\033[92mPASS\033[0m" if passed else "\033[91mFAIL\033[0m"

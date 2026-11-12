@@ -17,6 +17,7 @@ def integration_app(tmp_path):
         agent_key="test_agent_secret_key_789",
         max_auto_amount=Decimal("10.00"),
         max_escalate_amount=Decimal("25.00"),
+        demo_mode=True,
     )
     adapter = FakePaypalAdapter()
     adapter.seed_capture("CAP_A", Decimal("300.00"), "USD", "COMPLETED")

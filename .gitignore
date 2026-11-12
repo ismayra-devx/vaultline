@@ -1,16 +1,29 @@
-
 # Environment variables and secrets
 .env
 .env.*
+.env.local
+.env.*.local
 !.env.example
 
 # Python
 __pycache__/
 *.py[cod]
 *.pyo
+*$py.class
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Test and coverage output
+.coverage
+htmlcov/
 
 # Virtual environments
 venv/
@@ -24,21 +37,15 @@ dist/
 build/
 .next/
 
-# IDE and editor
+# IDE and Editor files
 .vscode/
 .idea/
 *.swp
+*.swo
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# Logs and databases
+# Logs
 *.log
-*.sqlite
-*.sqlite3
-*.db
-
-# Test and coverage output
-.coverage
-htmlcov/

@@ -1,10 +1,22 @@
 import os
-os.environ.setdefault("VAULTLINE_USE_REAL_PAYPAL", "false")
-os.environ.setdefault("APP_ENV", "test")
-os.environ.setdefault("VAULTLINE_JUDGE_USERNAME", "judge_test_runner")
-os.environ.setdefault("VAULTLINE_JUDGE_PASSWORD", "secure_judge_test_pass_12345!")
-os.environ.setdefault("VAULTLINE_AGENT_KEY", "test_agent_secret_key_123456789")
 import tempfile
+
+# Use a fresh isolated database for every test run.
+_fd, _init_test_db = tempfile.mkstemp(
+    prefix="vaultline_test_conftest_",
+    suffix=".db",
+)
+os.close(_fd)
+
+os.environ["VAULTLINE_DB_PATH"] = _init_test_db
+os.environ["VAULTLINE_AGENT_ID"] = "agent_test_runner"
+os.environ["VAULTLINE_USE_REAL_PAYPAL"] = "false"
+os.environ["APP_ENV"] = "test"
+os.environ["VAULTLINE_DEMO_MODE"] = "false"
+os.environ["VAULTLINE_SANDBOX_CAPTURE_IDS"] = ""
+os.environ["VAULTLINE_JUDGE_USERNAME"] = "judge_test_runner"
+os.environ["VAULTLINE_JUDGE_PASSWORD"] = "secure_judge_test_pass_12345!"
+os.environ["VAULTLINE_AGENT_KEY"] = "test_agent_secret_key_123456789"
 import pytest
 from decimal import Decimal
 from fastapi.testclient import TestClient

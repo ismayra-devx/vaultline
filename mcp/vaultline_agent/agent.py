@@ -19,8 +19,10 @@ import logging
 import uuid
 from typing import Any
 
+from .ai_fallback import AIFallbackClient, AIProviderError, AllAIProvidersUnavailableError
 from .config import AgentConfig
 from .gemini_client import GeminiClient, GeminiError
+from .groq_client import GroqClient, GroqError
 from .mcp_client import MCPAgentClient, MCPClientError
 from .models import AgentRunResult, RefundProposal
 from .security import detect_conflicting_details, detect_prompt_injection
@@ -125,10 +127,21 @@ class RefundAgent:
         config: AgentConfig | None = None,
         *,
         gemini_client: GeminiClient | None = None,
+        groq_client: GroqClient | None = None,
+        ai_client: AIFallbackClient | None = None,
         mcp_client: MCPAgentClient | None = None,
     ):
         self._config = config or AgentConfig.from_env()
-        self._gemini = gemini_client or GeminiClient(self._config)
+        if ai_client is not None:
+            self._ai = ai_client
+        else:
+            self._ai = AIFallbackClient(
+                self._config,
+                gemini_client=gemini_client,
+                groq_client=groq_client,
+            )
+        self._gemini = self._ai.gemini
+        self._groq = self._ai.groq
         self._mcp = mcp_client or MCPAgentClient(self._config)
 
     async def process_email(
@@ -197,15 +210,21 @@ class RefundAgent:
                 error_code="AMBIGUOUS_EMAIL_DETAILS",
             )
 
+        ai_metadata: dict[str, Any] = {}
         try:
-            proposal = await self._gemini.extract_refund_proposal(email_text)
-        except GeminiError as exc:
+            proposal, ai_metadata = await self._ai.extract_refund_proposal(
+                email_text,
+                correlation_id=client_request_id,
+            )
+        except (GeminiError, GroqError, AIProviderError) as exc:
             # Fail closed: never fabricate AI output and never submit a refund without valid AI extraction.
+            error_code = getattr(exc, "code", "AI_EXTRACTION_FAILED")
+            msg = getattr(exc, "message", str(exc))
             _log_security_event(
                 event="extraction_failed",
                 status="EXTRACTION_FAILED",
                 source="deterministic_fallback",
-                error_code=exc.code,
+                error_code=error_code,
                 client_request_id=client_request_id,
                 signal_count=0,
             )
@@ -221,12 +240,14 @@ class RefundAgent:
                 client_request_id=None,
                 refund_id=None,
                 message=(
-                    f"Deterministic fallback (no AI extraction performed): {exc.message} "
+                    f"Deterministic fallback (no AI extraction performed): {msg} "
                     "Processing stopped and no refund was submitted."
                 ),
-                error_code=exc.code,
+                error_code=error_code,
+                provider_metadata={"error": error_code, "client_request_id": client_request_id},
             )
 
+        provider_source: Literal["gemini", "groq"] = "groq" if ai_metadata.get("provider_used") == "groq" else "gemini"
         merged_indicators = _merge_indicators(proposal.suspicious_indicators, injection_signals)
         enriched_proposal = RefundProposal(
             capture_id=proposal.capture_id,
@@ -242,13 +263,13 @@ class RefundAgent:
             _log_security_event(
                 event="security_halt",
                 status="REVIEW_REQUIRED",
-                source="gemini",
+                source=provider_source,
                 error_code="SUSPICIOUS_INDICATORS_DETECTED",
                 client_request_id=client_request_id,
                 signal_count=len(merged_indicators),
             )
             return AgentRunResult(
-                source="gemini",
+                source=provider_source,
                 ai_extracted=True,
                 status="REVIEW_REQUIRED",
                 proposal=enriched_proposal,
@@ -263,11 +284,12 @@ class RefundAgent:
                     "Processing halted for manual review; no refund was submitted or executed."
                 ),
                 error_code="SUSPICIOUS_INDICATORS_DETECTED",
+                provider_metadata=ai_metadata,
             )
 
         if dry_run:
             return AgentRunResult(
-                source="gemini",
+                source=provider_source,
                 ai_extracted=True,
                 status="DRY_RUN",
                 proposal=enriched_proposal,
@@ -279,6 +301,7 @@ class RefundAgent:
                 refund_id=None,
                 message="Dry-run mode: extraction and validation succeeded; no MCP call or refund submission was performed.",
                 error_code=None,
+                provider_metadata=ai_metadata,
             )
 
         cid = client_request_id or f"agent-{uuid.uuid4()}"
@@ -319,6 +342,7 @@ class RefundAgent:
                         refund_id=refund_id,
                         message=message,
                         error_code=None,
+                        provider_metadata=ai_metadata,
                     )
                 except* MCPClientError:
                     pass
@@ -326,7 +350,7 @@ class RefundAgent:
             status = "UNCERTAIN" if mcp_error.uncertain else "ERROR"
             code = "MCP_OUTCOME_UNCERTAIN" if mcp_error.uncertain else "MCP_ERROR"
             return AgentRunResult(
-                source="gemini",
+                source=provider_source,
                 ai_extracted=True,
                 status=status,
                 proposal=enriched_proposal,
@@ -338,13 +362,14 @@ class RefundAgent:
                 refund_id=None,
                 message=mcp_error.message,
                 error_code=code,
+                provider_metadata=ai_metadata,
             )
 
         assert mcp_result is not None
 
         status, refund_id, message = _classify_mcp_outcome(mcp_result)
         return AgentRunResult(
-            source="gemini",
+            source=provider_source,
             ai_extracted=True,
             status=status,  # type: ignore[arg-type]
             proposal=enriched_proposal,
@@ -356,6 +381,7 @@ class RefundAgent:
             refund_id=refund_id,
             message=message,
             error_code=None,
+            provider_metadata=ai_metadata,
         )
 
     async def check_status(

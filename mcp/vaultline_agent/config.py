@@ -20,6 +20,11 @@ DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_GEMINI_TIMEOUT_SECONDS = 15.0
 DEFAULT_GEMINI_MAX_RETRIES = 2
+
+DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+DEFAULT_GROQ_TIMEOUT_SECONDS = 15.0
+DEFAULT_GROQ_MAX_RETRIES = 2
 MAX_ALLOWED_RETRIES = 3
 
 
@@ -68,6 +73,11 @@ class AgentConfig:
     gemini_base_url: str = DEFAULT_GEMINI_BASE_URL
     gemini_timeout_seconds: float = DEFAULT_GEMINI_TIMEOUT_SECONDS
     gemini_max_retries: int = DEFAULT_GEMINI_MAX_RETRIES
+    groq_api_key: str = field(default="", repr=False)
+    groq_model: str = DEFAULT_GROQ_MODEL
+    groq_base_url: str = DEFAULT_GROQ_BASE_URL
+    groq_timeout_seconds: float = DEFAULT_GROQ_TIMEOUT_SECONDS
+    groq_max_retries: int = DEFAULT_GROQ_MAX_RETRIES
     vaultline_api_base_url: str = "http://localhost:8000"
     vaultline_agent_key: str = field(default="", repr=False)
     vaultline_timeout_seconds: float = 10.0
@@ -83,8 +93,24 @@ class AgentConfig:
             os.getenv("GEMINI_BASE_URL", DEFAULT_GEMINI_BASE_URL).strip().rstrip("/")
             or DEFAULT_GEMINI_BASE_URL
         )
-        gemini_timeout = _parse_positive_float("GEMINI_TIMEOUT_SECONDS", DEFAULT_GEMINI_TIMEOUT_SECONDS)
-        gemini_retries = _parse_bounded_retries("GEMINI_MAX_RETRIES", DEFAULT_GEMINI_MAX_RETRIES)
+        common_ai_timeout = os.getenv("AI_TIMEOUT_SECONDS")
+        default_gemini_timeout = float(common_ai_timeout) if common_ai_timeout else DEFAULT_GEMINI_TIMEOUT_SECONDS
+        gemini_timeout = _parse_positive_float("GEMINI_TIMEOUT_SECONDS", default_gemini_timeout)
+
+        common_ai_retries = os.getenv("AI_MAX_RETRIES")
+        default_gemini_retries = int(common_ai_retries) if common_ai_retries else DEFAULT_GEMINI_MAX_RETRIES
+        gemini_retries = _parse_bounded_retries("GEMINI_MAX_RETRIES", default_gemini_retries)
+
+        groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
+        groq_model = os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL).strip() or DEFAULT_GROQ_MODEL
+        groq_base_url = (
+            os.getenv("GROQ_BASE_URL", DEFAULT_GROQ_BASE_URL).strip().rstrip("/")
+            or DEFAULT_GROQ_BASE_URL
+        )
+        default_groq_timeout = float(common_ai_timeout) if common_ai_timeout else DEFAULT_GROQ_TIMEOUT_SECONDS
+        groq_timeout = _parse_positive_float("GROQ_TIMEOUT_SECONDS", default_groq_timeout)
+        default_groq_retries = int(common_ai_retries) if common_ai_retries else DEFAULT_GROQ_MAX_RETRIES
+        groq_retries = _parse_bounded_retries("GROQ_MAX_RETRIES", default_groq_retries)
 
         api_base_url = os.getenv("VAULTLINE_API_BASE_URL", "http://localhost:8000").strip().rstrip("/")
         agent_key = os.getenv("VAULTLINE_AGENT_KEY", "").strip()
@@ -96,6 +122,11 @@ class AgentConfig:
             gemini_base_url=gemini_base_url,
             gemini_timeout_seconds=gemini_timeout,
             gemini_max_retries=gemini_retries,
+            groq_api_key=groq_api_key,
+            groq_model=groq_model,
+            groq_base_url=groq_base_url,
+            groq_timeout_seconds=groq_timeout,
+            groq_max_retries=groq_retries,
             vaultline_api_base_url=api_base_url,
             vaultline_agent_key=agent_key,
             vaultline_timeout_seconds=vaultline_timeout,

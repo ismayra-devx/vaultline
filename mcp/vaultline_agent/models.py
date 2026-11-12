@@ -108,7 +108,7 @@ class AgentRunResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    source: Literal["gemini", "deterministic_fallback", "deterministic_security_check"]
+    source: Literal["gemini", "groq", "deterministic_fallback", "deterministic_security_check"]
     ai_extracted: bool
     status: Literal[
         "COMPLETED",
@@ -129,4 +129,35 @@ class AgentRunResult(BaseModel):
     refund_id: str | None = None
     message: str
     error_code: str | None = None
+    provider_metadata: dict[str, Any] | None = None
+
+
+def resolve_stricter_risk(proposal_a: RefundProposal, proposal_b: RefundProposal) -> RefundProposal:
+    """Combine risk signals from two AI models, strictly taking the union of all risk indicators.
+
+    Ensures model disagreement results in stricter, never less restrictive, treatment.
+    """
+    seen: set[str] = set()
+    combined_indicators: list[str] = []
+    for item in [*proposal_a.suspicious_indicators, *proposal_b.suspicious_indicators]:
+        cleaned = item.strip()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            combined_indicators.append(cleaned[:200])
+
+    if proposal_a.risk_explanation == proposal_b.risk_explanation:
+        combined_explanation = proposal_a.risk_explanation
+    else:
+        combined_explanation = (
+            f"Model A: {proposal_a.risk_explanation}; Model B: {proposal_b.risk_explanation}"
+        )[:1000]
+
+    return RefundProposal(
+        capture_id=proposal_a.capture_id,
+        amount=proposal_a.amount,
+        currency=proposal_a.currency,
+        reason=proposal_a.reason,
+        suspicious_indicators=combined_indicators,
+        risk_explanation=combined_explanation,
+    )
 

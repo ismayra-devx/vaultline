@@ -14,6 +14,8 @@ SENSITIVE_KEYS = {
     "authorization",
     "x-agent-key",
     "x-session-token",
+    "groq_api_key",
+    "gemini_api_key",
 }
 
 KNOWN_INSECURE_PASSWORDS: Set[str] = {
@@ -68,6 +70,13 @@ class Config:
     currency: str = field(default_factory=lambda: os.getenv("VAULTLINE_CURRENCY", "USD"))
     approval_expiry_seconds: int = field(default_factory=lambda: int(os.getenv("VAULTLINE_APPROVAL_EXPIRY_SECONDS", "900")))
     demo_mode: bool = False
+    gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""), repr=False)
+    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-3.8-flash"))
+    groq_api_key: str = field(default_factory=lambda: os.getenv("GROQ_API_KEY", ""), repr=False)
+    groq_model: str = field(default_factory=lambda: os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"))
+    groq_base_url: str = field(default_factory=lambda: os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"))
+    ai_timeout_seconds: float = field(default_factory=lambda: float(os.getenv("AI_TIMEOUT_SECONDS", os.getenv("GEMINI_TIMEOUT_SECONDS", "15.0"))))
+    ai_max_retries: int = field(default_factory=lambda: int(os.getenv("AI_MAX_RETRIES", os.getenv("GEMINI_MAX_RETRIES", "2"))))
 
     def __post_init__(self):
         # In explicit demo mode only, populate safe demo defaults if secrets are omitted

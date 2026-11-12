@@ -92,7 +92,16 @@ class GeminiClient:
         self._transport = transport
         self._sleep_fn = sleep_fn
 
-    async def extract_refund_proposal(self, email_text: str) -> RefundProposal:
+    @property
+    def provider_name(self) -> str:
+        return "gemini"
+
+    async def extract_refund_proposal(
+        self,
+        email_text: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> RefundProposal:
         """Call Gemini to extract and strictly validate a RefundProposal."""
         if not self._api_key:
             raise GeminiUnavailableError(

@@ -217,7 +217,6 @@ export function LoginPage({ onDone }: { onDone: () => void }) {
           <span className="brand-name">Vaultline</span>
         </div>
         <h1>Merchant sign in</h1>
-        <p className="muted small">Approve or block escalated refund requests. Connected to PayPal Sandbox.</p>
         <label>
           Username
           <input autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} required />
@@ -244,7 +243,6 @@ export function LoginPage({ onDone }: { onDone: () => void }) {
         <button className="btn btn-primary" disabled={busy}>
           {busy ? 'Signing in… (free servers can take a minute to wake)' : 'Sign in'}
         </button>
-        <p className="muted tiny">Merchant login only. API keys cannot sign in here, and this page never sees PayPal credentials.</p>
       </form>
     </main>
   );

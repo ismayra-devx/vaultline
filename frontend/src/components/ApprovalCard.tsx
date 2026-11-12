@@ -91,7 +91,6 @@ export function ApprovalCard({ r, compact = false }: { r: RefundRequest; compact
         </div>
       )}
       {result && <p className={`result tone-text-${result.tone}`} role="status">{result.text}</p>}
-      <div className="muted mono small" style={{ marginTop: '12px', fontSize: '0.85rem' }}>{r.request_id}</div>
 
       <dialog ref={dialogRef} className="dialog" onClose={() => setConfirming(null)}>
         <h3>{confirming === 'approve' ? 'Authorise this exact refund?' : 'Deny this refund?'}</h3>

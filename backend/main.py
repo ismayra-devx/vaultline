@@ -10,7 +10,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    if os.getenv("APP_ENV", "").strip().lower() not in ("production", "prod"):
+        load_dotenv()
 except ImportError:
     pass
 
@@ -240,6 +241,8 @@ def create_app(
         allowed_origins = [
             "http://localhost:5173",
             "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "http://localhost:4173",
@@ -261,6 +264,27 @@ def create_app(
     @app.get("/health", tags=["Health"])
     def health_check():
         return {"status": "ok"}
+
+    # Safe AI provider diagnostics (zero secrets, metadata only)
+    @app.get("/api/v1/diagnostics/ai", tags=["v1-Diagnostics"])
+    def ai_diagnostics():
+        return {
+            "status": "ok",
+            "primary_provider": "gemini",
+            "fallback_provider": "groq",
+            "gemini": {
+                "configured": bool(cfg.gemini_api_key),
+                "model": cfg.gemini_model,
+                "timeout_seconds": cfg.ai_timeout_seconds,
+                "max_retries": cfg.ai_max_retries,
+            },
+            "groq": {
+                "configured": bool(cfg.groq_api_key),
+                "model": cfg.groq_model,
+                "timeout_seconds": cfg.ai_timeout_seconds,
+                "max_retries": cfg.ai_max_retries,
+            },
+        }
 
     # Include routers
     app.include_router(agent_router)

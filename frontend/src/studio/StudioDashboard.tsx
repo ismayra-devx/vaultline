@@ -1,150 +1,370 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AgStudio, AgStudioProvider, createWidgets } from 'ag-studio-react';
-import { studioTheme } from 'ag-studio';
 import { useData } from '../lib/data';
-import { InfoIcon } from '../components/ui';
-import { ApprovalQueueWidget, AuditHealthWidget, DecisionBreakdownWidget } from './widgets';
+import { ago, getCustomerName, money } from '../lib/format';
+import { Badge, DecisionBadge, Empty, ErrorState, Loading, StaleNote } from '../components/ui';
 
-// AG Studio licence keys are designed to ship in client bundles (not a secret).
-// Without a key Studio runs with a watermark — fine for local dev, set it for the judge build.
-const LICENSE = import.meta.env.VITE_AG_STUDIO_LICENSE_KEY as string | undefined;
-
-// Match Studio's own chrome (edit panels, menus, grids) to the cream + burgundy palette.
-const vaultTheme = studioTheme.withParams({
-  browserColorScheme: 'light',
-  backgroundColor: '#EFE8DF',
-  chromeBackgroundColor: '#EFE8DF',
-  foregroundColor: '#102F35',
-  accentColor: '#7F0303',
-  borderColor: 'rgba(216, 186, 152, 0.7)',
-  fontFamily: "'Inter', system-ui, sans-serif",
-  studioWrapperBackgroundColor: 'transparent',
-  studioWrapperBorder: 'none',
-} as never);
-
-const SHIELD = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>`;
-
-// Widgets read live backend state directly, so they need no data mapping or edit-panel form.
-const def = (id: string, label: string, comp: () => React.JSX.Element, w: number, h: number) => ({
-  id, label, icon: SHIELD, comp,
-  form: () => [],
-  defaultSize: { width: w, height: h },
-  minSize: { width: 4, height: 3 },
-  toolbar: ['duplicate', 'delete'],
-});
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const customWidgets: any[] = [
-  def('vaultlineDecisions', 'Decision breakdown', DecisionBreakdownWidget, 6, 7),
-  def('vaultlineApprovals', 'Approval queue', ApprovalQueueWidget, 6, 7),
-  def('vaultlineAudit', 'Audit health', AuditHealthWidget, 12, 4),
-];
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const widgets = (cfg: any) =>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  createWidgets<any>({
-    additionalTypes: customWidgets,
-    menu: [{ label: 'Vaultline', widgetIds: customWidgets.map((w) => w.id) }, ...cfg.menu],
-  });
-
-const initialState = {
-  selectedPageId: 'overview',
-  pages: [
-    {
-      id: 'overview',
-      name: 'Security overview',
-      widgets: {
-        decisions: { type: 'vaultlineDecisions' },
-        approvals: { type: 'vaultlineApprovals' },
-        audit: { type: 'vaultlineAudit' },
-      },
-      layout: {
-        columns: 12, rowHeight: 48, widgetPadding: 0,
-        // Transparent so each widget's own cream/burgundy card shows through.
-        backgroundColor: 'transparent', widgetBackgroundColor: 'transparent',
-        widgetBorderEnabled: false, widgetBorderRadius: 22,
-      },
-      widgetLayout: {
-        decisions: { xTrack: 0, yTrack: 0, xSpan: 6, ySpan: 7 },
-        approvals: { xTrack: 6, yTrack: 0, xSpan: 6, ySpan: 7 },
-        audit: { xTrack: 0, yTrack: 7, xSpan: 12, ySpan: 4 },
-      },
-    },
-  ],
-};
-
-const NARROW = '(max-width: 1100px)'; // below this the Studio canvas + filter panel crowd the widgets
-function useNarrow() {
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(NARROW).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(NARROW);
-    const on = () => setNarrow(mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  }, []);
-  return narrow;
+/** Parse a decimal money string into integer cents safely; invalid values yield 0 (never NaN). */
+function parseCents(amount: string | null | undefined): number {
+  if (!amount) return 0;
+  const trimmed = amount.trim();
+  if (!/^\d+(?:\.\d{1,2})?$/.test(trimmed)) return 0;
+  const [whole, frac = ''] = trimmed.split('.');
+  const cents = Number(whole) * 100 + Number(frac.padEnd(2, '0'));
+  return Number.isFinite(cents) ? cents : 0;
 }
 
-const Intro = () => (
-  <p className="intro"><InfoIcon />Live view of every refund your agents attempt. Built on AG Studio; use Edit dashboard to add your own charts.</p>
-);
+function formatCents(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
 
-export function StudioDashboard() {
-  const narrow = useNarrow();
-  // On phones the Studio canvas and its side panels are too cramped, so the same widgets stack natively.
-  if (narrow) {
-    return (
-      <div className="mobile-stack">
-        <Intro />
-        <DecisionBreakdownWidget />
-        <ApprovalQueueWidget />
-        <AuditHealthWidget />
-      </div>
-    );
+function parseTimestampMs(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+export function StudioDashboard({ onOpen }: { onOpen?: (id: string) => void }) {
+  const { requests, audit } = useData();
+
+  if (requests.loading) return <Loading label="Loading dashboard…" />;
+  if (requests.error && !requests.data) {
+    return <ErrorState error={requests.error} onRetry={requests.refresh} />;
   }
-  return <StudioCanvas />;
-}
 
-function StudioCanvas() {
-  const { requests } = useData();
-  const [mode, setMode] = useState<'view' | 'edit'>('view');
-  // Flat rows so analysts can build extra built-in charts/grids. amount_usd is display/analytics only.
-  const rowsKey = JSON.stringify((requests.data ?? []).map((r) => [r.request_id, r.decision, r.execution_status, r.status]));
-  const data = useMemo(
-    () => ({
-      sources: [
-        {
-          id: 'refund_requests',
-          name: 'Refund requests',
-          data: (requests.data ?? []).map((r) => ({
-            request_id: r.request_id,
-            agent_id: r.agent_id,
-            decision: r.decision,
-            amount_usd: Number(r.amount),
-            reasons: r.reasons.join(', '),
-            execution_status: r.execution_status,
-            paypal_refund_id: r.paypal_refund_id ?? '',
-            created_at: new Date(r.created_at),
-          })),
-        },
-      ],
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rowsKey],
+  const now = new Date();
+  const allRequests = requests.data ?? [];
+
+  // Policy decision counts (authoritative backend decisions)
+  const allowRequests = allRequests.filter((r) => r.decision === 'ALLOW');
+  const escalateRequests = allRequests.filter((r) => r.decision === 'ESCALATE');
+  const blockRequests = allRequests.filter((r) => r.decision === 'BLOCK');
+
+  // Execution outcomes (strictly separated from policy decisions)
+  const completedRefunds = allRequests.filter(
+    (r) => r.execution_status === 'COMPLETED' && Boolean(r.paypal_refund_id)
+  );
+  const pendingApprovals = allRequests.filter(
+    (r) =>
+      r.status === 'AWAITING_APPROVAL' ||
+      (r.decision === 'ESCALATE' &&
+        r.status !== 'APPROVED' &&
+        r.status !== 'DENIED' &&
+        r.status !== 'EXPIRED' &&
+        r.status !== 'COMPLETED')
+  );
+  const failedRefunds = allRequests.filter(
+    (r) => r.execution_status === 'FAILED' || r.execution_status === 'CANCELLED' || r.status === 'FAILED'
+  );
+  const unknownRefunds = allRequests.filter(
+    (r) =>
+      r.execution_status === 'UNKNOWN' ||
+      r.execution_status === 'RECONCILING' ||
+      r.status === 'UNKNOWN'
   );
 
+  // Financial totals in integer cents (never NaN)
+  const requestedCents = allRequests.reduce((sum, r) => sum + parseCents(r.amount), 0);
+  const completedCents = completedRefunds.reduce((sum, r) => sum + parseCents(r.amount), 0);
+  const blockedCents = blockRequests.reduce((sum, r) => sum + parseCents(r.amount), 0);
+  const pendingCents = pendingApprovals.reduce((sum, r) => sum + parseCents(r.amount), 0);
+  const failedCents = failedRefunds.reduce((sum, r) => sum + parseCents(r.amount), 0);
+  const unknownCents = unknownRefunds.reduce((sum, r) => sum + parseCents(r.amount), 0);
+
+  // Row 2: This month metrics (uses current Date, ignores missing/invalid created_at)
+  const thisMonthRequests = allRequests.filter((r) => {
+    const ms = parseTimestampMs(r.created_at);
+    if (ms === null) return false;
+    const d = new Date(ms);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const totalTransactionsMonth = thisMonthRequests.length;
+  const totalCentsMonth = thisMonthRequests.reduce((sum, r) => sum + parseCents(r.amount), 0);
+  // Backend dependency: Vaultline policy engine enforces per-transaction thresholds ($10.00 auto / $25.00 escalation).
+  // No monthly limit is defined in the policy schema or exposed by the backend API.
+  const backendMonthlyLimit = null as number | null;
+  const amountRemaining =
+    backendMonthlyLimit !== null ? Math.max(0, backendMonthlyLimit - totalCentsMonth / 100) : null;
+
+  // Row 3: Recent requests (safe timestamp sort, never calls localeCompare on undefined)
+  const recentRequests = [...allRequests]
+    .sort((a, b) => (parseTimestampMs(b.created_at) ?? 0) - (parseTimestampMs(a.created_at) ?? 0))
+    .slice(0, 6);
+
+  const latestAuditTimestamp = audit.data?.events?.[0]?.timestamp ?? null;
+
   return (
-    <AgStudioProvider licenseKey={LICENSE}>
-      <div className="studio-bar">
-        <Intro />
-        <button className="btn btn-primary btn-pill" aria-pressed={mode === 'edit'} onClick={() => setMode((m) => (m === 'view' ? 'edit' : 'view'))}>
-          {mode === 'view' ? 'Edit dashboard' : 'Done editing'}
-        </button>
+    <div className="card-dashboard">
+      {requests.stale && <StaleNote updatedAt={requests.updatedAt} />}
+
+      {/* Row 1: Three cards */}
+      <div className="dash-row-1">
+        <div className="dash-card">
+          <div className="dash-card-header">
+            <span className="dash-card-title">REQUESTED</span>
+          </div>
+          <div className="dash-card-count">{allRequests.length}</div>
+          <div className="dash-card-sub">Total value {money(formatCents(requestedCents))}</div>
+          <a href="#/requests?filter=ALL" className="dash-card-link">
+            View all requests &rarr;
+          </a>
+        </div>
+
+        <div className="dash-card">
+          <div className="dash-card-header">
+            <span className="dash-card-title">COMPLETED REFUNDS</span>
+          </div>
+          <div className="dash-card-count">{completedRefunds.length}</div>
+          <div className="dash-card-sub">
+            {money(formatCents(completedCents))} refunded &middot; {allowRequests.length} allowed by policy
+          </div>
+          <a href="#/requests?filter=ALLOW" className="dash-card-link">
+            View allowed &rarr;
+          </a>
+        </div>
+
+        <div className="dash-card">
+          <div className="dash-card-header">
+            <span className="dash-card-title">BLOCKED</span>
+          </div>
+          <div className="dash-card-count">{blockRequests.length}</div>
+          <div className="dash-card-sub">{money(formatCents(blockedCents))} prevented</div>
+          <a href="#/requests?filter=BLOCK" className="dash-card-link">
+            View blocked &rarr;
+          </a>
+        </div>
       </div>
-      <div className="studio-host">
-        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        <AgStudio {...({ data, widgets, initialState, mode, theme: vaultTheme } as any)} />
+
+      {/* Row 2: One strip */}
+      <div className="dash-strip">
+        <div className="dash-strip-item">
+          <span className="dash-strip-label">TOTAL TRANSACTIONS THIS MONTH</span>
+          <span className="dash-strip-value">{totalTransactionsMonth}</span>
+        </div>
+        <div className="dash-strip-divider" aria-hidden />
+        <div className="dash-strip-item">
+          <span className="dash-strip-label">TOTAL AMOUNT THIS MONTH</span>
+          <span className="dash-strip-value">{money(formatCents(totalCentsMonth))}</span>
+        </div>
+        <div className="dash-strip-divider" aria-hidden />
+        <div className="dash-strip-item">
+          <span className="dash-strip-label">
+            {backendMonthlyLimit !== null
+              ? `AMOUNT REMAINING (MONTHLY LIMIT ${money(backendMonthlyLimit.toFixed(2))})`
+              : 'MONTHLY POLICY LIMIT'}
+          </span>
+          <span
+            className="dash-strip-value"
+            style={backendMonthlyLimit === null ? { fontSize: '15px', color: 'var(--muted)' } : undefined}
+            title={
+              backendMonthlyLimit === null
+                ? 'Backend dependency: Policy engine enforces per-transaction thresholds ($10.00 auto / $25.00 escalation); no monthly cap is exposed by the API.'
+                : undefined
+            }
+          >
+            {backendMonthlyLimit !== null ? money(amountRemaining!.toFixed(2)) : 'Not configured (Backend dependency)'}
+          </span>
+        </div>
       </div>
-    </AgStudioProvider>
+
+      {/* Governance row: Decision Breakdown + Audit Health */}
+      <div className="dash-row-3">
+        <section className="dash-panel" aria-label="Decision Breakdown">
+          <div className="dash-panel-head">
+            <h3>Decision &amp; execution breakdown</h3>
+            <a href="#/requests" className="dash-panel-link">
+              All requests &rarr;
+            </a>
+          </div>
+          <div className="table-wrap">
+            <table className="dash-table">
+              <thead>
+                <tr>
+                  <th>POLICY / EXECUTION</th>
+                  <th className="num">COUNT</th>
+                  <th className="num">AMOUNT</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><DecisionBadge d="ALLOW" /> Allowed by policy</td>
+                  <td className="num">{allowRequests.length}</td>
+                  <td className="num">
+                    {money(formatCents(allowRequests.reduce((s, r) => s + parseCents(r.amount), 0)))}
+                  </td>
+                </tr>
+                <tr>
+                  <td><DecisionBadge d="ESCALATE" /> Escalated (policy)</td>
+                  <td className="num">{escalateRequests.length}</td>
+                  <td className="num">
+                    {money(formatCents(escalateRequests.reduce((s, r) => s + parseCents(r.amount), 0)))}
+                  </td>
+                </tr>
+                <tr>
+                  <td><DecisionBadge d="BLOCK" /> Blocked by policy</td>
+                  <td className="num">{blockRequests.length}</td>
+                  <td className="num">{money(formatCents(blockedCents))}</td>
+                </tr>
+                <tr>
+                  <td><Badge tone="ok">COMPLETED</Badge> Refunds executed</td>
+                  <td className="num">{completedRefunds.length}</td>
+                  <td className="num">{money(formatCents(completedCents))}</td>
+                </tr>
+                <tr>
+                  <td><Badge tone="warn">AWAITING</Badge> Awaiting approval</td>
+                  <td className="num">{pendingApprovals.length}</td>
+                  <td className="num">{money(formatCents(pendingCents))}</td>
+                </tr>
+                <tr>
+                  <td><Badge tone="bad">FAILED</Badge> Failed / cancelled execution</td>
+                  <td className="num">{failedRefunds.length}</td>
+                  <td className="num">{money(formatCents(failedCents))}</td>
+                </tr>
+                <tr>
+                  <td><Badge tone="warn">UNKNOWN</Badge> Unknown / reconciling</td>
+                  <td className="num">{unknownRefunds.length}</td>
+                  <td className="num">{money(formatCents(unknownCents))}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="dash-panel" aria-label="Audit Health">
+          <div className="dash-panel-head">
+            <h3>Audit health</h3>
+            <a href="#/activity" className="dash-panel-link">
+              Audit trail &rarr;
+            </a>
+          </div>
+          {audit.loading ? (
+            <Loading label="Verifying audit chain…" />
+          ) : audit.error && !audit.data ? (
+            <div className="state state-error" role="alert">
+              <Badge tone="warn">Audit unavailable</Badge>
+              <p className="muted small">
+                {audit.error.message} {audit.error.status ? `(HTTP ${audit.error.status})` : ''}
+              </p>
+              <button className="btn" onClick={audit.refresh}>
+                Retry
+              </button>
+            </div>
+          ) : audit.data ? (
+            <div className="dash-details-section">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                {audit.data.is_valid ? (
+                  <Badge tone="ok">Chain verified</Badge>
+                ) : (
+                  <Badge tone="bad">Verification failed</Badge>
+                )}
+                {audit.stale && <Badge tone="warn">Stale</Badge>}
+              </div>
+              <p className="small" style={{ marginBottom: '10px' }}>{audit.data.message}</p>
+              <dl className="payload">
+                <dt>Total events</dt>
+                <dd>{audit.data.total_events}</dd>
+                <dt>Latest event</dt>
+                <dd>{latestAuditTimestamp ? new Date(latestAuditTimestamp).toLocaleString() : '—'}</dd>
+              </dl>
+            </div>
+          ) : (
+            <Empty title="Audit unavailable" hint="No audit verification data returned by backend." />
+          )}
+        </section>
+      </div>
+
+      {/* Row 3: Two panels */}
+      <div className="dash-row-3">
+        {/* Panel 1: Recent requests */}
+        <section className="dash-panel">
+          <div className="dash-panel-head">
+            <h3>Recent requests</h3>
+            <a href="#/requests" className="dash-panel-link">
+              View all &rarr;
+            </a>
+          </div>
+          {recentRequests.length === 0 ? (
+            <Empty title="No requests yet" hint="Refund requests will appear here." />
+          ) : (
+            <div className="table-wrap">
+              <table className="dash-table">
+                <thead>
+                  <tr>
+                    <th>CUSTOMER</th>
+                    <th className="num">AMOUNT</th>
+                    <th>STATUS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentRequests.map((r) => (
+                    <tr key={r.request_id}>
+                      <td>
+                        <a
+                          href={`#/activity?req=${encodeURIComponent(r.request_id)}`}
+                          className="customer-name-link"
+                          onClick={(e) => {
+                            if (onOpen) {
+                              e.preventDefault();
+                              onOpen(r.request_id);
+                            }
+                          }}
+                          title={`View audit trail & transaction details for ${r.request_id}`}
+                        >
+                          {getCustomerName(r)}
+                        </a>
+                      </td>
+                      <td className="num">{money(r.amount, r.currency)}</td>
+                      <td><DecisionBadge d={r.decision} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Panel 2: Pending approvals · N live */}
+        <section className="dash-panel">
+          <div className="dash-panel-head">
+            <h3>Pending approvals &middot; {pendingApprovals.length} live</h3>
+            <a href="#/approvals" className="dash-panel-link">
+              Approvals &rarr;
+            </a>
+          </div>
+          {pendingApprovals.length === 0 ? (
+            <div className="state">
+              <strong>Nothing waiting for you</strong>
+              <p className="muted small">Escalated refunds will queue here for review.</p>
+            </div>
+          ) : (
+            <ul className="pending-approvals-list">
+              {pendingApprovals.map((r) => (
+                <li key={r.request_id} className="pending-approval-item">
+                  <div className="pending-item-main">
+                    <a
+                      href={`#/activity?req=${encodeURIComponent(r.request_id)}`}
+                      className="customer-name-link"
+                      onClick={(e) => {
+                        if (onOpen) {
+                          e.preventDefault();
+                          onOpen(r.request_id);
+                        }
+                      }}
+                      title={`View audit trail & transaction details for ${r.request_id}`}
+                    >
+                      {getCustomerName(r)}
+                    </a>
+                    <span className="small muted">
+                      {parseTimestampMs(r.created_at) !== null ? ago(r.created_at) : '—'}
+                    </span>
+                  </div>
+                  <div className="pending-item-amount num">
+                    <strong>{money(r.amount, r.currency)}</strong>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </div>
   );
 }

@@ -40,3 +40,14 @@ const EXEC: Record<string, { label: string; tone: string }> = {
 export const execLabel = (s: ExecutionStatus) => EXEC[s] ?? { label: String(s), tone: 'muted' };
 export const STATUS_TONE = (s: string) =>
   ({ AWAITING_APPROVAL: 'warn', APPROVED: 'info', COMPLETED: 'ok', BLOCKED: 'bad', DENIED: 'muted', EXPIRED: 'muted', FAILED: 'bad', UNKNOWN: 'warn' } as Record<string, string>)[s] ?? 'muted';
+
+export function getCustomerName(
+  r: { capture_id?: string | null; request_id?: string | null; customer_name?: string | null; customer_id?: string | null } | null | undefined
+): string {
+  if (!r) return 'Customer';
+  if (r.customer_name) return r.customer_name;
+  if (r.customer_id) return `Customer (${r.customer_id})`;
+  if (r.capture_id) return `Customer (${r.capture_id})`;
+  if (r.request_id) return `Customer (${r.request_id})`;
+  return 'Customer';
+}

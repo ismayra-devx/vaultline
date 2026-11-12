@@ -2,9 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { api, hasSession, USING_FIXTURES } from './api/client';
 import { BrandMark, Loading, SilkBackground } from './components/ui';
 import { DataProvider, useData } from './lib/data';
-import { ActivityPage, AnalystPanel, ApprovalsPage, LoginPage, RequestsPage } from './pages/pages';
+import { ActivityPage, ApprovalsPage, LoginPage, RequestsPage } from './pages/pages';
 
-// Studio is heavy; load it only for the dashboard route.
 const StudioDashboard = lazy(() => import('./studio/StudioDashboard').then((m) => ({ default: m.StudioDashboard })));
 
 type Route = 'dashboard' | 'requests' | 'approvals' | 'activity';
@@ -37,13 +36,26 @@ export default function App() {
 function Shell({ onLogout }: { onLogout: () => void }) {
   const [route, setRoute] = useState<Route>(readHash);
   const [focus, setFocus] = useState<string | null>(null);
-  const [analyst, setAnalyst] = useState(false);
   const { requests } = useData();
+
   useEffect(() => {
-    const h = () => setRoute(readHash());
+    const h = () => {
+      setRoute(readHash());
+      if (location.hash.includes('?req=')) {
+        const id = location.hash.split('?req=')[1]?.split('&')[0];
+        if (id) setFocus(decodeURIComponent(id));
+      }
+    };
+    h();
     addEventListener('hashchange', h);
     return () => removeEventListener('hashchange', h);
   }, []);
+
+  const openAudit = (id: string) => {
+    setFocus(id);
+    location.hash = `#/activity?req=${encodeURIComponent(id)}`;
+  };
+
   const pending = (requests.data ?? []).filter((r) => r.status === 'AWAITING_APPROVAL').length;
   // The live indicator rings briefly whenever the backend reports something new.
   const signature = JSON.stringify((requests.data ?? []).map((r) => [r.request_id, r.status, r.execution_status]));
@@ -64,7 +76,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
     <div className="app">
       {USING_FIXTURES && <div className="fixture-banner" role="alert">DEMO FIXTURES — not live backend data. Unset VITE_DEMO_FIXTURES for the real build.</div>}
       <header className={`topbar ${fresh ? 'fresh' : ''}`}>
-        <div className="brand"><BrandMark /><span className="brand-name">Vaultline</span><span className="tag">Every agent has a limit.</span></div>
+        <div className="brand"><BrandMark /><span className="brand-name">Vaultline</span></div>
         <nav aria-label="Main">
           {ROUTES.map((r) => (
             <a key={r.id} href={`#/${r.id}`} className={route === r.id ? 'on' : ''} aria-current={route === r.id ? 'page' : undefined}>
@@ -73,25 +85,22 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           ))}
         </nav>
         <div className="who">
-          
-          <button className="link" onClick={() => setAnalyst((v) => !v)} aria-expanded={analyst}>Analyst</button>
           <span className="who-name">Merchant</span>
           <button className="link" onClick={onLogout}>Sign out</button>
         </div>
       </header>
-      <div className={`body ${analyst ? 'with-analyst' : ''}`}>
+      <div className="body">
         <main className="content">
           <h1 className="sr-only">{ROUTES.find((r) => r.id === route)!.label}</h1>
           {route === 'dashboard' && (
-            <Suspense fallback={<Loading label="Loading AG Studio…" />}>
-              <StudioDashboard />
+            <Suspense fallback={<Loading label="Loading dashboard…" />}>
+              <StudioDashboard onOpen={openAudit} />
             </Suspense>
           )}
-          {route === 'requests' && <RequestsPage onOpen={(id) => { setFocus(id); location.hash = '#/activity'; }} />}
+          {route === 'requests' && <RequestsPage onOpen={openAudit} />}
           {route === 'approvals' && <ApprovalsPage />}
           {route === 'activity' && <ActivityPage key={focus ?? ''} focus={focus} />}
         </main>
-        {analyst && <AnalystPanel />}
       </div>
     </div>
   );

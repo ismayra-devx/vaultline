@@ -106,12 +106,6 @@ export interface MerchantSession {
   expires_at: string;
 }
 
-export interface AnalystAnswer {
-  summary: string;
-  record_ids: string[];
-  source: 'model' | 'rule-based';
-}
-
 export class ApiError extends Error {
   status: number;
   code: string;

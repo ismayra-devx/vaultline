@@ -102,6 +102,57 @@ mcp/
   vaultline_mcp/config.py          env settings + backend URL allowlist
   vaultline_mcp/backend_client.py  HTTP client, error mapping, uncertain-outcome handling
   vaultline_mcp/server.py          the 3 tools, output whitelist, outcome text
-  tests/test_unit.py               mocked-backend tests
+  vaultline_agent/                 AI refund agent (Gemini extraction + MCP stdio client)
+  tests/test_unit.py               mocked-backend MCP server tests
+  tests/test_agent.py              AI agent + security/outage unit tests
   tests/test_integration.py        stdio server -> real backend
 ```
+
+## Vaultline AI Agent (`vaultline_agent`)
+
+`vaultline_agent` is the AI layer sitting in front of `vaultline_mcp`. It reads an untrusted customer email, calls Gemini to extract a structured refund proposal, validates the output strictly with Pydantic, and submits the proposal to Vaultline strictly through the three-tool MCP stdio interface (`get_agent_policy`, `request_refund`, `get_request_status`).
+
+### Architecture & Responsibility Split
+
+- **AI extracts and explains:** Gemini extracts `capture_id`, decimal-string `amount`, `currency`, `reason`, `suspicious_indicators`, and `risk_explanation`. Customer email text is wrapped as untrusted data and scanned for prompt-injection cues.
+- **Deterministic backend authorizes:** The FastAPI security backend is the sole authority for `ALLOW` (up to `$10.00`), `ESCALATE` (`>$10.00` to `$25.00`), and `BLOCK` (`>$25.00`). AI output can never approve a refund, override policy thresholds, or communicate with PayPal directly.
+
+### Environment Configuration
+
+`vaultline_agent` loads the repository root `.env` automatically (without overriding existing process environment variables):
+
+- `GEMINI_API_KEY`: Gemini API key (held with `repr=False`, never logged, never passed to MCP tool arguments or the MCP server subprocess).
+- `GEMINI_MODEL`: Gemini model name (default: `gemini-3.8-flash`).
+- `GEMINI_TIMEOUT_SECONDS`: Bounded per-request timeout in seconds (default: `15`).
+- `GEMINI_MAX_RETRIES`: Bounded retry count for transient errors (`429`, `500`, `502`, `503`, `504`, timeouts; default: `2`, max: `3`).
+- `VAULTLINE_API_BASE_URL`: Vaultline FastAPI backend origin for the MCP server (default: `http://localhost:8000`).
+- `VAULTLINE_AGENT_KEY`: Agent bearer credential passed only to the MCP stdio server subprocess environment (never to Gemini or model arguments).
+
+### Launch Command
+
+Run from inside `mcp/` (so the repo `mcp/` folder does not shadow the `mcp` SDK package):
+
+```bash
+cd mcp
+python -m vaultline_agent --email "Please refund \$5.00 for capture CAP_A (duplicate charge)"
+```
+
+Or from a file / status check:
+
+```bash
+python -m vaultline_agent --email-file path/to/email.txt
+python -m vaultline_agent --check-status <request_id>
+```
+
+### Gemini Outage & Fail-Closed Fallback Behaviour
+
+If Gemini is unavailable (e.g., HTTP `503` capacity outage), times out after bounded retries, or returns missing/malformed/schema-invalid output:
+
+- **Fail closed:** The agent stops immediately and **never** calls `request_refund`.
+- **Clear provenance:** The result sets `"source": "deterministic_fallback"` and `"ai_extracted": false`, explaining why processing stopped without fabricating AI extraction or submitting a refund.
+
+### AI Disclosure (Hackathon Judging)
+
+- **AI Provider & Model:** Google Gemini (`gemini-3.8-flash` by default, configurable via `GEMINI_MODEL`) via the Gemini `generateContent` REST API.
+- **Scope of AI:** Natural-language extraction of refund proposals and risk/suspicion explanation from untrusted customer emails.
+- **Deterministic Guardrails:** Strict Pydantic schema validation, deterministic prompt-injection detection, fail-closed outage handling, a restricted 3-tool MCP stdio boundary, and server-side deterministic policy enforcement (`ALLOW` / `ESCALATE` / `BLOCK`) with human merchant approval for escalations.

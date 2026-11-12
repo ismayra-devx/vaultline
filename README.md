@@ -132,3 +132,32 @@ Upon startup, the database is initialized in WAL mode and seeded with safe test 
   6. Money movements go strictly through the `PaypalAdapter` interface.
   7. Secrets are never stored in or read from `.env` files; secrets are redacted as `[REDACTED]`.
   8. Tests are never weakened, deleted, or skipped.
+
+---
+
+## VLT-01 Environment & PayPal Sandbox Configuration
+
+The backend fails closed unless `VAULTLINE_USE_REAL_PAYPAL` and required credentials are explicitly configured:
+
+- **PayPal Sandbox mode**: Set `VAULTLINE_USE_REAL_PAYPAL=true` with `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, and `VAULTLINE_SANDBOX_CAPTURE_IDS` (comma-separated real PayPal Sandbox capture IDs).
+- **Local demo mode (fake double)**: Set `VAULTLINE_USE_REAL_PAYPAL=false` and `VAULTLINE_DEMO_MODE=true`.
+- **Credentials**: Set `VAULTLINE_JUDGE_USERNAME`, `VAULTLINE_JUDGE_PASSWORD`, and `VAULTLINE_AGENT_KEY` (required outside explicit demo mode).
+- **Hosted deployment**: Set `VAULTLINE_DEPLOYMENT=hosted` (enforces `PayPalSandboxAdapter` and non-empty `VAULTLINE_SANDBOX_CAPTURE_IDS`).
+
+---
+
+## Running the P3 AI Agent (`mcp/vaultline_agent`)
+
+From the `mcp/` directory (with `GEMINI_API_KEY` and `VAULTLINE_AGENT_KEY` configured):
+
+```bash
+python -m vaultline_agent --email "Please refund $5.00 for capture CAP_A" --dry-run
+```
+
+Omit `--dry-run` to execute the full `AI Agent -> MCP Server -> FastAPI Gateway` flow.
+
+---
+
+## AI Disclosure
+
+Vaultline uses Google Gemini (`mcp/vaultline_agent/gemini_client.py`) solely to extract structured refund fields and detect untrusted prompt-injection indicators from customer emails. All refund authorization decisions (`ALLOW`, `ESCALATE`, `BLOCK`), policy thresholds, human-in-the-loop merchant approvals, and PayPal Sandbox executions are enforced deterministically by the FastAPI backend. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party licenses and service notices.

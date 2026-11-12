@@ -115,6 +115,7 @@ class AgentRunResult(BaseModel):
         "ESCALATED",
         "BLOCKED",
         "REVIEW_REQUIRED",
+        "DRY_RUN",
         "UNCERTAIN",
         "EXTRACTION_FAILED",
         "ERROR",

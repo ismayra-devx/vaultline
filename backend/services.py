@@ -389,6 +389,26 @@ class VaultlineService:
                 client_request_id=client_request_id,
             )
 
+    def _build_agent_request_response(self, row: Any) -> RefundResponse:
+        reasons = json.loads(row["reasons"])
+        return self._build_refund_response(
+            request_id=row["id"],
+            decision=row["decision"],
+            reasons=reasons,
+            risk_summary=row["risk_summary"],
+            approval_required=bool(row["approval_required"]),
+            expires_at=row["expires_at"],
+            execution_status=row["exec_status"],
+            paypal_refund_id=row["paypal_refund_id"],
+            adapter_call_count=row["adapter_call_count"] or 0,
+            amount=row["amount"],
+            currency=row["currency"],
+            approval_id=row["appr_id"],
+            created_at=row["created_at"],
+            reason=row["reason"] if "reason" in row.keys() else None,
+            client_request_id=row["client_request_id"] if "client_request_id" in row.keys() else None,
+        )
+
     def get_agent_request(self, agent_id: str, request_id: str) -> RefundResponse:
         conn = self.db.get_connection()
         cursor = conn.execute(
@@ -413,24 +433,27 @@ class VaultlineService:
                 detail="Access denied: cannot access requests belonging to another agent.",
             )
 
-        reasons = json.loads(row["reasons"])
-        return self._build_refund_response(
-            request_id=row["id"],
-            decision=row["decision"],
-            reasons=reasons,
-            risk_summary=row["risk_summary"],
-            approval_required=bool(row["approval_required"]),
-            expires_at=row["expires_at"],
-            execution_status=row["exec_status"],
-            paypal_refund_id=row["paypal_refund_id"],
-            adapter_call_count=row["adapter_call_count"] or 0,
-            amount=row["amount"],
-            currency=row["currency"],
-            approval_id=row["appr_id"],
-            created_at=row["created_at"],
-            reason=row["reason"] if "reason" in row.keys() else None,
-            client_request_id=row["client_request_id"] if "client_request_id" in row.keys() else None,
+        return self._build_agent_request_response(row)
+
+    def get_agent_request_by_client_id(self, agent_id: str, client_request_id: str) -> RefundResponse:
+        """Read-only lookup of an agent's own request by its client_request_id."""
+        conn = self.db.get_connection()
+        cursor = conn.execute(
+            """
+            SELECT ar.*, ex.status as exec_status, ex.paypal_refund_id, ex.adapter_call_count,
+                   ap.id as appr_id
+            FROM action_requests ar
+            LEFT JOIN executions ex ON ar.id = ex.request_id
+            LEFT JOIN approvals ap ON ar.id = ap.request_id
+            WHERE ar.agent_id = ? AND ar.client_request_id = ?
+            """,
+            (agent_id, client_request_id),
         )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found.")
+
+        return self._build_agent_request_response(row)
 
     def get_agent_policy(self, agent_id: str) -> PolicyResponse:
         conn = self.db.get_connection()

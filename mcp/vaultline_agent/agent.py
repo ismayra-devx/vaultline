@@ -23,7 +23,7 @@ from .config import AgentConfig
 from .gemini_client import GeminiClient, GeminiError
 from .mcp_client import MCPAgentClient, MCPClientError
 from .models import AgentRunResult, RefundProposal
-from .security import detect_prompt_injection
+from .security import detect_conflicting_details, detect_prompt_injection
 
 security_log = logging.getLogger("vaultline_agent.security")
 
@@ -136,6 +136,7 @@ class RefundAgent:
         email_text: str,
         *,
         client_request_id: str | None = None,
+        dry_run: bool = False,
     ) -> AgentRunResult:
         """Process an untrusted customer email through security checks, Gemini extraction, and Vaultline MCP."""
         injection_signals = detect_prompt_injection(email_text)
@@ -165,6 +166,35 @@ class RefundAgent:
                     "Gemini extraction and refund submission were not executed."
                 ),
                 error_code="PROMPT_INJECTION_DETECTED",
+            )
+
+        conflict_signals = detect_conflicting_details(email_text)
+        if conflict_signals:
+            _log_security_event(
+                event="security_halt",
+                status="REVIEW_REQUIRED",
+                source="deterministic_security_check",
+                error_code="AMBIGUOUS_EMAIL_DETAILS",
+                client_request_id=client_request_id,
+                signal_count=len(conflict_signals),
+            )
+            return AgentRunResult(
+                source="deterministic_security_check",
+                ai_extracted=False,
+                status="REVIEW_REQUIRED",
+                proposal=None,
+                prompt_injection_detected=False,
+                injection_signals=conflict_signals,
+                policy=None,
+                mcp_result=None,
+                client_request_id=None,
+                refund_id=None,
+                message=(
+                    "Ambiguous or conflicting refund details detected in untrusted customer email "
+                    f"({', '.join(conflict_signals)}). Processing halted for manual review; "
+                    "Gemini extraction and refund submission were not executed."
+                ),
+                error_code="AMBIGUOUS_EMAIL_DETAILS",
             )
 
         try:
@@ -235,6 +265,22 @@ class RefundAgent:
                 error_code="SUSPICIOUS_INDICATORS_DETECTED",
             )
 
+        if dry_run:
+            return AgentRunResult(
+                source="gemini",
+                ai_extracted=True,
+                status="DRY_RUN",
+                proposal=enriched_proposal,
+                prompt_injection_detected=False,
+                injection_signals=[],
+                policy=None,
+                mcp_result=None,
+                client_request_id=None,
+                refund_id=None,
+                message="Dry-run mode: extraction and validation succeeded; no MCP call or refund submission was performed.",
+                error_code=None,
+            )
+
         cid = client_request_id or f"agent-{uuid.uuid4()}"
         policy: dict[str, Any] | None = None
 
@@ -254,6 +300,29 @@ class RefundAgent:
             mcp_error = _first_mcp_error(eg)
 
         if mcp_error is not None:
+            if mcp_error.uncertain:
+                # Read-only reconciliation by client_request_id; never resubmit request_refund.
+                try:
+                    async with self._mcp.session() as session:
+                        recovered = await session.get_request_status(client_request_id=cid)
+                    status, refund_id, message = _classify_mcp_outcome(recovered)
+                    return AgentRunResult(
+                        source="gemini",
+                        ai_extracted=True,
+                        status=status,  # type: ignore[arg-type]
+                        proposal=enriched_proposal,
+                        prompt_injection_detected=prompt_injection_detected,
+                        injection_signals=injection_signals,
+                        policy=policy,
+                        mcp_result=recovered,
+                        client_request_id=str(recovered.get("client_request_id") or cid),
+                        refund_id=refund_id,
+                        message=message,
+                        error_code=None,
+                    )
+                except* MCPClientError:
+                    pass
+
             status = "UNCERTAIN" if mcp_error.uncertain else "ERROR"
             code = "MCP_OUTCOME_UNCERTAIN" if mcp_error.uncertain else "MCP_ERROR"
             return AgentRunResult(
@@ -289,7 +358,12 @@ class RefundAgent:
             error_code=None,
         )
 
-    async def check_status(self, request_id: str) -> dict[str, Any]:
+    async def check_status(
+        self,
+        request_id: str | None = None,
+        *,
+        client_request_id: str | None = None,
+    ) -> dict[str, Any]:
         """Retrieve subsequent refund status strictly through the MCP `get_request_status` tool."""
         async with self._mcp.session() as session:
-            return await session.get_request_status(request_id)
+            return await session.get_request_status(request_id, client_request_id=client_request_id)

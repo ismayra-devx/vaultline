@@ -99,6 +99,10 @@ class VaultlineBackend:
         # request_id is validated against a strict pattern by the tool before reaching here.
         return await self._send("GET", f"/api/v1/refunds/{request_id}")
 
+    async def get_request_by_client_id(self, client_request_id: str) -> dict[str, Any]:
+        # client_request_id is validated against CLIENT_ID_PATTERN before reaching here.
+        return await self._send("GET", f"/api/v1/refunds/by-client-id/{client_request_id}")
+
     async def get_policy(self) -> dict[str, Any]:
         return await self._send("GET", "/api/v1/agents/me/policy")
 

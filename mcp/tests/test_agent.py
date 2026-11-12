@@ -81,8 +81,10 @@ class FakeBackendLedger:
 
     adapter_call_count: int = 0
     refund_submissions: list[dict[str, Any]] = field(default_factory=list)
+    stored_by_client_id: dict[str, dict[str, Any]] = field(default_factory=dict)
     force_execution_status: str | None = None
     force_timeout_on_submit: bool = False
+    timeout_after_persisting: bool = False
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         if request.url.path == "/api/v1/agents/me/policy" and request.method == "GET":
@@ -95,6 +97,13 @@ class FakeBackendLedger:
                     "currency": "USD",
                 },
             )
+
+        if request.url.path.startswith("/api/v1/refunds/by-client-id/") and request.method == "GET":
+            cid_key = request.url.path.split("/api/v1/refunds/by-client-id/", 1)[1]
+            stored = self.stored_by_client_id.get(cid_key)
+            if stored is None:
+                return httpx.Response(404, json={"detail": "Request not found."})
+            return httpx.Response(200, json=stored)
 
         if request.url.path == "/api/v1/refunds" and request.method == "POST":
             payload = json.loads(request.content.decode("utf-8"))
@@ -121,20 +130,22 @@ class FakeBackendLedger:
                 exec_status = "NOT_STARTED"
                 refund_id = None
 
-            return httpx.Response(
-                200,
-                json={
-                    "request_id": f"req_{len(self.refund_submissions)}",
-                    "client_request_id": payload["client_request_id"],
-                    "decision": decision,
-                    "status": decision,
-                    "execution_status": exec_status,
-                    "amount": payload["amount"],
-                    "currency": payload["currency"],
-                    "refund_id": refund_id,
-                    "reason": payload["reason"],
-                },
-            )
+            record = {
+                "request_id": f"req_{len(self.refund_submissions)}",
+                "client_request_id": payload["client_request_id"],
+                "decision": decision,
+                "status": decision,
+                "execution_status": exec_status,
+                "amount": payload["amount"],
+                "currency": payload["currency"],
+                "refund_id": refund_id,
+                "reason": payload["reason"],
+            }
+            self.stored_by_client_id[payload["client_request_id"]] = record
+            if self.timeout_after_persisting:
+                raise httpx.ReadTimeout("simulated timeout after backend persistence", request=request)
+
+            return httpx.Response(200, json=record)
 
         return httpx.Response(404, json={"detail": "not found"})
 
@@ -935,3 +946,198 @@ async def test_20_refund_proposal_rejects_unexpected_fields(extra_field: dict[st
     )
     with pytest.raises(GeminiValidationError):
         await client.extract_refund_proposal("Please refund $5.00 for CAP_A.")
+
+
+# ---------------------------------------------------------------------------
+# 21. CLI --dry-run and dry_run=True never invoke MCP or submit a refund
+# ---------------------------------------------------------------------------
+
+
+async def test_21_dry_run_never_submits_refund():
+    from vaultline_agent.__main__ import _build_parser
+
+    parsed = _build_parser().parse_args(["--email", "Please refund $5.00 for CAP_A", "--dry-run"])
+    assert parsed.dry_run is True
+
+    ledger = FakeBackendLedger()
+
+    class ExplodingMCPClient:
+        def session(self):
+            raise AssertionError("MCP session must never be opened in dry-run mode")
+
+    agent = RefundAgent(
+        _agent_config(),
+        gemini_client=GeminiClient(
+            _agent_config(),
+            transport=httpx.MockTransport(
+                lambda req: _gemini_ok_response(
+                    {
+                        "capture_id": "CAP_A",
+                        "amount": "5.00",
+                        "currency": "USD",
+                        "reason": "Duplicate charge",
+                        "suspicious_indicators": [],
+                        "risk_explanation": "Normal low-value refund.",
+                    }
+                )
+            ),
+            sleep_fn=_no_sleep,
+        ),
+        mcp_client=ExplodingMCPClient(),  # type: ignore[arg-type]
+    )
+
+    result = await agent.process_email("Please refund $5.00 for CAP_A.", dry_run=True)
+
+    assert result.status == "DRY_RUN"
+    assert result.ai_extracted is True
+    assert result.proposal is not None
+    assert result.proposal.amount == "5.00"
+    assert result.mcp_result is None
+    assert result.refund_id is None
+    assert result.client_request_id is None
+    assert ledger.adapter_call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# 22. Conflicting amounts halt deterministically before Gemini & MCP
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "email",
+    [
+        "Please refund $5.00 for CAP_A, actually make it $20.00.",
+        "Refund 5.00 USD or maybe 15.00 USD on capture CAP_A.",
+    ],
+)
+async def test_22_conflicting_amounts_return_review_required_before_gemini_and_refund(email: str):
+    gemini_called = False
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        nonlocal gemini_called
+        gemini_called = True
+        raise AssertionError("Gemini must not be called when email has conflicting amounts")
+
+    ledger = FakeBackendLedger()
+    agent = RefundAgent(
+        _agent_config(),
+        gemini_client=GeminiClient(_agent_config(), transport=httpx.MockTransport(handler), sleep_fn=_no_sleep),
+        mcp_client=InProcessMCPClient(ledger),  # type: ignore[arg-type]
+    )
+
+    result = await agent.process_email(email)
+
+    assert result.status == "REVIEW_REQUIRED"
+    assert result.error_code == "AMBIGUOUS_EMAIL_DETAILS"
+    assert "conflicting_amounts" in result.injection_signals
+    assert result.ai_extracted is False
+    assert gemini_called is False
+    assert ledger.adapter_call_count == 0
+
+
+async def test_22b_equivalent_repeated_amount_not_flagged_as_conflicting():
+    ledger = FakeBackendLedger()
+    agent = RefundAgent(
+        _agent_config(),
+        gemini_client=GeminiClient(
+            _agent_config(),
+            transport=httpx.MockTransport(
+                lambda req: _gemini_ok_response(
+                    {
+                        "capture_id": "CAP_A",
+                        "amount": "5.00",
+                        "currency": "USD",
+                        "reason": "Duplicate charge",
+                        "suspicious_indicators": [],
+                        "risk_explanation": "Normal refund.",
+                    }
+                )
+            ),
+            sleep_fn=_no_sleep,
+        ),
+        mcp_client=InProcessMCPClient(ledger),  # type: ignore[arg-type]
+    )
+
+    result = await agent.process_email("Please refund $5 (5.00 USD) for CAP_A.")
+    assert result.status == "COMPLETED"
+    assert result.refund_id == "PP_REF_123"
+
+
+# ---------------------------------------------------------------------------
+# 23. Conflicting capture IDs halt deterministically before Gemini & MCP
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "email",
+    [
+        "Please refund $5.00 for CAP_A or CAP_B.",
+        "Refund $5.00 for capture ID 2GG94321XY1234567 and capture #8AB12345CD6789012.",
+    ],
+)
+async def test_23_conflicting_capture_ids_return_review_required_before_gemini_and_refund(email: str):
+    gemini_called = False
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        nonlocal gemini_called
+        gemini_called = True
+        raise AssertionError("Gemini must not be called when email has conflicting capture IDs")
+
+    ledger = FakeBackendLedger()
+    agent = RefundAgent(
+        _agent_config(),
+        gemini_client=GeminiClient(_agent_config(), transport=httpx.MockTransport(handler), sleep_fn=_no_sleep),
+        mcp_client=InProcessMCPClient(ledger),  # type: ignore[arg-type]
+    )
+
+    result = await agent.process_email(email)
+
+    assert result.status == "REVIEW_REQUIRED"
+    assert result.error_code == "AMBIGUOUS_EMAIL_DETAILS"
+    assert "conflicting_capture_ids" in result.injection_signals
+    assert result.ai_extracted is False
+    assert gemini_called is False
+    assert ledger.adapter_call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# 24. Uncertain submission recovery via read-only client_request_id lookup
+# ---------------------------------------------------------------------------
+
+
+async def test_24_uncertain_submission_recovered_by_client_request_id_without_resubmit():
+    ledger = FakeBackendLedger(timeout_after_persisting=True)
+    mcp_client = InProcessMCPClient(ledger)
+    agent = RefundAgent(
+        _agent_config(),
+        gemini_client=GeminiClient(
+            _agent_config(),
+            transport=httpx.MockTransport(
+                lambda req: _gemini_ok_response(
+                    {
+                        "capture_id": "CAP_A",
+                        "amount": "5.00",
+                        "currency": "USD",
+                        "reason": "Duplicate charge",
+                        "suspicious_indicators": [],
+                        "risk_explanation": "Normal",
+                    }
+                )
+            ),
+            sleep_fn=_no_sleep,
+        ),
+        mcp_client=mcp_client,  # type: ignore[arg-type]
+    )
+
+    result = await agent.process_email(
+        "Please refund $5.00 for CAP_A.",
+        client_request_id="agent-recover-idemp-key-5678",
+    )
+
+    assert result.status == "COMPLETED"
+    assert result.refund_id == "PP_REF_123"
+    assert result.client_request_id == "agent-recover-idemp-key-5678"
+    assert result.error_code is None
+    assert mcp_client.request_refund_calls == 1
+    assert len(ledger.refund_submissions) == 1
+    assert ledger.adapter_call_count == 1

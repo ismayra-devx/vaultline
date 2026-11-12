@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 import re
 
 _INJECTION_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -66,4 +67,45 @@ def frame_untrusted_email(email_text: str) -> str:
         f"{sanitized}\n"
         "</untrusted_customer_email>"
     )
+
+
+_AMOUNT_MENTION_RE = re.compile(
+    r"(?:USD\s*)?\$\s*(\d+(?:\.\d{1,2})?)\b|\b(\d+(?:\.\d{1,2})?)\s*USD\b",
+    re.IGNORECASE,
+)
+_CAP_PREFIX_RE = re.compile(r"\b(CAP_[A-Za-z0-9_-]{1,60})\b")
+_CAP_LABEL_RE = re.compile(
+    r"\bcapture(?:\s+id|\s*#|\s*:)\s*([A-Za-z0-9_-]{4,64})\b",
+    re.IGNORECASE,
+)
+
+
+def detect_conflicting_details(email_text: str) -> list[str]:
+    """Detect multiple distinct amounts or capture IDs in an untrusted email."""
+    if not email_text:
+        return []
+
+    signals: list[str] = []
+
+    amounts: set[Decimal] = set()
+    for match in _AMOUNT_MENTION_RE.finditer(email_text):
+        raw_val = match.group(1) or match.group(2)
+        if raw_val:
+            try:
+                amounts.add(Decimal(raw_val).quantize(Decimal("0.01")))
+            except InvalidOperation:
+                continue
+    if len(amounts) > 1:
+        signals.append("conflicting_amounts")
+
+    captures: set[str] = set(_CAP_PREFIX_RE.findall(email_text))
+    for match in _CAP_LABEL_RE.finditer(email_text):
+        candidate = match.group(1)
+        # Avoid false positives on ordinary English words by requiring digits/underscores or >=8 uppercase chars.
+        if any(ch.isdigit() or ch == "_" for ch in candidate) or (candidate.isupper() and len(candidate) >= 8):
+            captures.add(candidate)
+    if len(captures) > 1:
+        signals.append("conflicting_capture_ids")
+
+    return signals
 

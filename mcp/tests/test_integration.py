@@ -103,3 +103,14 @@ async def test_wrong_agent_key_is_rejected():
     async with stdio_client(key="definitely_not_a_valid_key") as c:
         res = await refund(c, "5.00")
     assert res.is_error and "credential" in res.content[0].text
+
+
+async def test_get_request_status_by_client_request_id():
+    key = cid()
+    async with stdio_client() as c:
+        created = (await refund(c, "5.00", key)).structured_content
+        fetched = (await c.call_tool("get_request_status", {"client_request_id": key})).structured_content
+        missing = await c.call_tool("get_request_status", {"client_request_id": cid()})
+    assert fetched["request_id"] == created["request_id"]
+    assert fetched["refund_id"] == created["refund_id"]
+    assert missing.is_error and "not found" in missing.content[0].text

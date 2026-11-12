@@ -45,6 +45,19 @@ def submit_refund(
         client_request_id=payload.client_request_id,
     )
 
+@router.get("/refunds/by-client-id/{client_request_id}", response_model=RefundResponse, tags=["v1-Agent"])
+def get_refund_status_by_client_id(
+    client_request_id: str,
+    request: Request,
+    agent: AgentIdentity = Depends(require_agent_auth),
+) -> RefundResponse:
+    """Read-only lookup of own request status by client_request_id."""
+    service = request.app.state.service
+    return service.get_agent_request_by_client_id(
+        agent_id=agent.agent_id,
+        client_request_id=client_request_id,
+    )
+
 @router.get("/refunds/{request_id}", response_model=RefundResponse, tags=["v1-Agent"])
 def get_refund_status(
     request_id: str,

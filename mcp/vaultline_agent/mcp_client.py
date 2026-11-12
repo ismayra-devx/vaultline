@@ -103,8 +103,16 @@ class MCPAgentSession:
             raise MCPClientError(err_text, uncertain=is_uncertain)
         return _extract_structured(res)
 
-    async def get_request_status(self, request_id: str) -> dict[str, Any]:
-        res = await self._client.call_tool("get_request_status", {"request_id": request_id})
+    async def get_request_status(
+        self,
+        request_id: str | None = None,
+        *,
+        client_request_id: str | None = None,
+    ) -> dict[str, Any]:
+        if bool(request_id) == bool(client_request_id):
+            raise MCPClientError("Provide exactly one of request_id or client_request_id.")
+        args = {"request_id": request_id} if request_id is not None else {"client_request_id": client_request_id}
+        res = await self._client.call_tool("get_request_status", args)
         if getattr(res, "is_error", False):
             raise MCPClientError(_extract_error_text(res))
         return _extract_structured(res)

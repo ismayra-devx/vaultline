@@ -315,3 +315,74 @@ def test_v1_auth_boundary_separation(app_and_deps):
     )
     assert res3.status_code == 403
 
+
+def test_v1_get_refund_by_client_request_id_and_auth_isolation(app_and_deps):
+    client = app_and_deps["client"]
+    db = app_and_deps["db"]
+    adapter = app_and_deps["adapter"]
+    token = get_merchant_token(client)
+    cid = "client-lookup-test-001"
+
+    # Submit an ALLOW refund with client_request_id
+    res_create = client.post(
+        "/api/v1/refunds",
+        headers={"X-Agent-Key": "vl_agent_secret_key_abc123"},
+        json={
+            "capture_id": "CAP_A",
+            "amount": "5.00",
+            "currency": "USD",
+            "reason": "Lookup test",
+            "client_request_id": cid,
+        },
+    )
+    assert res_create.status_code == 200
+    created = res_create.json()
+    calls_after_create = adapter.money_call_count
+    assert calls_after_create == 1
+
+    # 1. Successful read-only lookup by own client_request_id (zero extra adapter calls)
+    res_lookup = client.get(
+        f"/api/v1/refunds/by-client-id/{cid}",
+        headers={"X-Agent-Key": "vl_agent_secret_key_abc123"},
+    )
+    assert res_lookup.status_code == 200
+    fetched = res_lookup.json()
+    assert fetched["request_id"] == created["request_id"]
+    assert fetched["client_request_id"] == cid
+    assert fetched["refund_id"] == created["refund_id"]
+    assert adapter.money_call_count == calls_after_create
+
+    # 2. Unknown client_request_id -> 404
+    res_unknown = client.get(
+        "/api/v1/refunds/by-client-id/nonexistent-client-id",
+        headers={"X-Agent-Key": "vl_agent_secret_key_abc123"},
+    )
+    assert res_unknown.status_code == 404
+
+    # 3. Unauthenticated lookup -> 401
+    res_unauth = client.get(f"/api/v1/refunds/by-client-id/{cid}")
+    assert res_unauth.status_code == 401
+
+    # 4. Merchant session cannot call agent lookup route -> 403
+    res_merchant = client.get(
+        f"/api/v1/refunds/by-client-id/{cid}",
+        headers={"X-Session-Token": token},
+    )
+    assert res_merchant.status_code == 403
+
+    # 5. Another agent cannot see the first agent's request -> 404
+    from backend.auth import hash_agent_key
+    conn = db.get_connection()
+    other_key = "vl_agent_other_key_999"
+    conn.execute(
+        "INSERT INTO agents (id, merchant_id, name, api_key_hash, status, created_at) VALUES (?, ?, ?, ?, 'active', ?)",
+        ("agent_other", "merch_default", "Other Agent", hash_agent_key(other_key), "2026-01-01T00:00:00Z"),
+    )
+    conn.commit()
+    res_other = client.get(
+        f"/api/v1/refunds/by-client-id/{cid}",
+        headers={"X-Agent-Key": other_key},
+    )
+    assert res_other.status_code == 404
+    assert adapter.money_call_count == calls_after_create
+

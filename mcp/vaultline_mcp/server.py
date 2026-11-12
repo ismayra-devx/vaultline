@@ -94,7 +94,7 @@ def create_server(backend: VaultlineBackend) -> MCPServer:
             "merchant policy and returns ALLOW, ESCALATE (needs merchant approval) or BLOCK. Amount is a "
             "decimal string such as \"5.00\". Reuse the same client_request_id when retrying the same refund."
         ),
-        annotations=ToolAnnotations(title="Request refund", readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=True),
+        annotations=ToolAnnotations(title="Request refund", readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=True),
     )
     async def request_refund(
         capture_id: Annotated[str, Field(pattern=ID_PATTERN, description="PayPal capture id to refund")],
@@ -115,13 +115,22 @@ def create_server(backend: VaultlineBackend) -> MCPServer:
         return shape(result)
 
     @server.tool(
-        description="Get the current Vaultline decision and PayPal execution status of one of this agent's refund requests.",
+        description=(
+            "Get the current Vaultline decision and PayPal execution status of one of this agent's refund requests, "
+            "using either request_id or client_request_id (for read-only timeout reconciliation)."
+        ),
         annotations=ToolAnnotations(title="Get request status", readOnlyHint=True, openWorldHint=True),
     )
     async def get_request_status(
-        request_id: Annotated[str, Field(pattern=ID_PATTERN, description="request_id returned by request_refund")],
+        request_id: Annotated[str | None, Field(pattern=ID_PATTERN, description="request_id returned by request_refund")] = None,
+        client_request_id: Annotated[str | None, Field(pattern=CLIENT_ID_PATTERN, description="Idempotency key used when submitting request_refund")] = None,
     ) -> dict[str, Any]:
-        return shape(await call(backend.get_request(request_id)))
+        if bool(request_id) == bool(client_request_id):
+            raise ToolError("Provide exactly one of request_id or client_request_id.")
+        if request_id is not None:
+            return shape(await call(backend.get_request(request_id)))
+        assert client_request_id is not None
+        return shape(await call(backend.get_request_by_client_id(client_request_id)))
 
     @server.tool(
         description="Get the refund limits that Vaultline enforces for this agent (auto-approve and escalation thresholds).",

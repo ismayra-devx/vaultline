@@ -52,6 +52,12 @@ async def test_exactly_three_tools_and_no_credential_in_schema():
     async with client as c:
         tools = (await c.list_tools()).tools
     assert sorted(t.name for t in tools) == sorted(TOOL_NAMES)
+    by_name = {t.name: t for t in tools}
+    assert by_name["request_refund"].annotations is not None
+    assert by_name["request_refund"].annotations.destructive_hint is True
+    assert by_name["request_refund"].annotations.read_only_hint is False
+    assert by_name["get_request_status"].annotations.read_only_hint is True
+    assert by_name["get_agent_policy"].annotations.read_only_hint is True
     params = {p.lower() for t in tools for p in t.input_schema.get("properties", {})}
     assert params == {"capture_id", "amount", "currency", "reason", "client_request_id", "request_id"}
     for forbidden in ("agent_id", "merchant_id", "token", "secret", "credential", "approve", "ai_risk"):
@@ -189,6 +195,38 @@ def test_settings_repr_hides_key(monkeypatch):
     monkeypatch.setenv("VAULTLINE_AGENT_KEY", KEY)
     monkeypatch.setenv("VAULTLINE_API_BASE_URL", "http://localhost:8000")
     assert KEY not in repr(Settings.from_env())
+
+
+async def test_get_request_status_by_client_request_id_is_read_only():
+    client, fake = make_client(
+        lambda r: reply(
+            request_id="req_recovered",
+            client_request_id="cid-12345678",
+            decision="ALLOW",
+            status="COMPLETED",
+            execution_status="COMPLETED",
+            amount="5.00",
+            currency="USD",
+            refund_id="PP_REF_REC",
+        )
+    )
+    async with client as c:
+        res = await c.call_tool("get_request_status", {"client_request_id": "cid-12345678"})
+    assert not res.is_error
+    assert res.structured_content["request_id"] == "req_recovered"
+    assert len(fake.calls) == 1
+    assert fake.calls[0].method == "GET"
+    assert fake.calls[0].url.path == "/api/v1/refunds/by-client-id/cid-12345678"
+
+
+async def test_get_request_status_requires_exactly_one_identifier():
+    client, fake = make_client(lambda r: reply(**BLOCK))
+    async with client as c:
+        r_none = await c.call_tool("get_request_status", {})
+        r_both = await c.call_tool("get_request_status", {"request_id": "req_1", "client_request_id": "cid-12345678"})
+    assert r_none.is_error
+    assert r_both.is_error
+    assert len(fake.calls) == 0
 
 
 def test_missing_key_is_config_error(monkeypatch):

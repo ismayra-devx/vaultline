@@ -9,7 +9,7 @@ import { ago, getCustomerName, money, time } from '../lib/format';
 
 /* ---------------- Requests (transaction explorer) ---------------- */
 export function RequestsPage({ onOpen }: { onOpen: (id: string) => void }) {
-  const { requests, audit } = useData();
+  const { requests } = useData();
   const getFilterFromHash = (): Decision | 'ALL' => {
     const h = location.hash;
     if (h.includes('filter=ALLOW')) return 'ALLOW';
@@ -19,7 +19,6 @@ export function RequestsPage({ onOpen }: { onOpen: (id: string) => void }) {
   };
 
   const [filter, setFilter] = useState<Decision | 'ALL'>(getFilterFromHash);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     const h = () => setFilter(getFilterFromHash());
@@ -32,8 +31,6 @@ export function RequestsPage({ onOpen }: { onOpen: (id: string) => void }) {
 
   const allRows = requests.data ?? [];
   const rows = allRows.filter((r) => filter === 'ALL' || r.decision === filter);
-  const selectedRequest = allRows.find((r) => r.request_id === selectedId);
-  const auditEvents = audit.data?.events ?? [];
 
   return (
     <section>
@@ -54,7 +51,7 @@ export function RequestsPage({ onOpen }: { onOpen: (id: string) => void }) {
         ))}
       </div>
       {rows.length === 0 ? (
-        <Empty title="No requests match" hint="Agent requests appear here within 2 seconds of being decided." />
+        <Empty title="No requests match" hint="Requests appear here within 2 seconds of being decided." />
       ) : (
         <div className="table-wrap">
           <table>
@@ -62,8 +59,6 @@ export function RequestsPage({ onOpen }: { onOpen: (id: string) => void }) {
               <tr>
                 <th>Customer</th>
                 <th>When</th>
-                <th>Request</th>
-                <th>Agent</th>
                 <th className="num">Amount</th>
                 <th>Decision</th>
                 <th>Reason</th>
@@ -72,30 +67,21 @@ export function RequestsPage({ onOpen }: { onOpen: (id: string) => void }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr
-                  key={r.request_id}
-                  className={r.request_id === selectedId ? 'selected-row' : ''}
-                >
+                <tr key={r.request_id}>
                   <td>
-                    <button
-                      type="button"
+                    <a
+                      href={`#/activity?req=${encodeURIComponent(r.request_id)}`}
                       className="customer-name-link"
-                      onClick={() => setSelectedId((prev) => (prev === r.request_id ? null : r.request_id))}
-                      title={`View transaction details for ${r.request_id}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onOpen(r.request_id);
+                      }}
+                      title={`View audit trail & transaction details for ${r.request_id}`}
                     >
                       {getCustomerName(r)}
-                    </button>
+                    </a>
                   </td>
                   <td title={time(r.created_at)}>{ago(r.created_at)}</td>
-                  <td
-                    className="mono small clickable-cell"
-                    tabIndex={0}
-                    onClick={() => onOpen(r.request_id)}
-                    onKeyDown={(e) => e.key === 'Enter' && onOpen(r.request_id)}
-                  >
-                    {r.request_id}
-                  </td>
-                  <td className="mono small">{r.agent_id}</td>
                   <td className="num">{money(r.amount, r.currency)}</td>
                   <td><DecisionBadge d={r.decision} /></td>
                   <td className="small">{r.reasons.join(' ') || '—'}</td>
@@ -107,16 +93,6 @@ export function RequestsPage({ onOpen }: { onOpen: (id: string) => void }) {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {selectedRequest && (
-        <div className="dash-details-section" aria-label="Transaction Information">
-          <TransactionInformation
-            request={selectedRequest}
-            events={auditEvents}
-            onClose={() => setSelectedId(null)}
-          />
         </div>
       )}
     </section>
@@ -138,7 +114,6 @@ export function ApprovalsPage() {
   return (
     <section>
       {requests.stale && <StaleNote updatedAt={requests.updatedAt} />}
-      <h2>Escalated refunds &middot; {esc.filter((r) => r.status === 'AWAITING_APPROVAL').length} waiting for you</h2>
       {sorted.length === 0 ? (
         <Empty title="No escalated refunds" hint="Requests between $10 and $25 queue here for merchant approval." />
       ) : (
@@ -168,12 +143,6 @@ export function ActivityPage({ focus }: { focus: string | null }) {
 
   return (
     <section>
-      <div className={`chain ${a.is_valid ? 'ok' : 'bad'}`} role="status">
-        <strong>Audit hash chain: {a.is_valid ? 'verified intact' : 'BROKEN'}</strong>
-        <span className="muted small">
-          {' '}· {a.total_events} events ({a.message}) · SHA-256 chain, tamper-evident · checked {time(audit.updatedAt ? new Date(audit.updatedAt).toISOString() : null)}
-        </span>
-      </div>
       {ids.length === 0 ? (
         <Empty title="No audit events yet" />
       ) : (
@@ -181,7 +150,7 @@ export function ActivityPage({ focus }: { focus: string | null }) {
           <nav className="side-list" aria-label="Requests">
             {ids.slice().reverse().map((id) => {
               const r = requests.data?.find((x) => x.request_id === id);
-              const custName = r ? getCustomerName(r) : `Customer (${id})`;
+              const custName = r ? getCustomerName(r) : 'Customer';
               return (
                 <button
                   key={id}
@@ -190,7 +159,6 @@ export function ActivityPage({ focus }: { focus: string | null }) {
                   onClick={() => setSel(id)}
                 >
                   <div className="side-item-cust">{custName}</div>
-                  <div className="side-item-id mono small">{id}</div>
                 </button>
               );
             })}
@@ -247,10 +215,9 @@ export function LoginPage({ onDone }: { onDone: () => void }) {
         <div className="brand">
           <BrandMark />
           <span className="brand-name">Vaultline</span>
-          <span className="tag">Every agent has a limit.</span>
         </div>
         <h1>Merchant sign in</h1>
-        <p className="muted small">Approve or block what your AI agents try to refund. Connected to PayPal Sandbox.</p>
+        <p className="muted small">Approve or block escalated refund requests. Connected to PayPal Sandbox.</p>
         <label>
           Username
           <input autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} required />
@@ -277,7 +244,7 @@ export function LoginPage({ onDone }: { onDone: () => void }) {
         <button className="btn btn-primary" disabled={busy}>
           {busy ? 'Signing in… (free servers can take a minute to wake)' : 'Sign in'}
         </button>
-        <p className="muted tiny">Merchant login only. Agent keys cannot sign in here, and this page never sees PayPal credentials.</p>
+        <p className="muted tiny">Merchant login only. API keys cannot sign in here, and this page never sees PayPal credentials.</p>
       </form>
     </main>
   );

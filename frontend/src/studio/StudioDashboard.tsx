@@ -1,18 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useData } from '../lib/data';
 import { ago, getCustomerName, money } from '../lib/format';
 import { Empty, Loading, DecisionBadge } from '../components/ui';
-import { TransactionInformation } from '../components/TransactionInformation';
 
-export function StudioDashboard() {
-  const { requests, audit } = useData();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+export function StudioDashboard({ onOpen }: { onOpen?: (id: string) => void }) {
+  const { requests } = useData();
 
   const now = useMemo(() => new Date(), []);
 
   if (requests.loading) return <Loading label="Loading dashboard…" />;
   const allRequests = requests.data ?? [];
-  const auditEvents = audit.data?.events ?? [];
 
   // Row 1: Three cards
   const requestedCount = allRequests.length;
@@ -50,8 +47,6 @@ export function StudioDashboard() {
   const pendingApprovals = allRequests.filter(
     (r) => r.status === 'AWAITING_APPROVAL' || (r.decision === 'ESCALATE' && r.status !== 'APPROVED' && r.status !== 'DENIED')
   );
-
-  const selectedRequest = allRequests.find((r) => r.request_id === selectedId);
 
   return (
     <div className="card-dashboard">
@@ -134,35 +129,33 @@ export function StudioDashboard() {
             </a>
           </div>
           {recentRequests.length === 0 ? (
-            <Empty title="No requests yet" hint="Agent refund requests will appear here." />
+            <Empty title="No requests yet" hint="Refund requests will appear here." />
           ) : (
             <div className="table-wrap">
               <table className="dash-table">
                 <thead>
                   <tr>
                     <th>CUSTOMER</th>
-                    <th>AGENT</th>
                     <th className="num">AMOUNT</th>
                     <th>STATUS</th>
                   </tr>
                 </thead>
                 <tbody>
                   {recentRequests.map((r) => (
-                    <tr
-                      key={r.request_id}
-                      className={r.request_id === selectedId ? 'selected-row' : ''}
-                    >
+                    <tr key={r.request_id}>
                       <td>
-                        <button
-                          type="button"
+                        <a
+                          href={`#/activity?req=${encodeURIComponent(r.request_id)}`}
                           className="customer-name-link"
-                          onClick={() => setSelectedId((prev) => (prev === r.request_id ? null : r.request_id))}
-                          title={`View transaction details for ${r.request_id}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            onOpen?.(r.request_id);
+                          }}
+                          title={`View audit trail & transaction details for ${r.request_id}`}
                         >
                           {getCustomerName(r)}
-                        </button>
+                        </a>
                       </td>
-                      <td className="mono small">{r.agent_id ?? '—'}</td>
                       <td className="num">{money(r.amount, r.currency)}</td>
                       <td><DecisionBadge d={r.decision} /></td>
                     </tr>
@@ -189,20 +182,19 @@ export function StudioDashboard() {
           ) : (
             <ul className="pending-approvals-list">
               {pendingApprovals.map((r) => (
-                <li
-                  key={r.request_id}
-                  className={`pending-approval-item ${r.request_id === selectedId ? 'selected-item' : ''}`}
-                >
+                <li key={r.request_id} className="pending-approval-item">
                   <div className="pending-item-main">
-                    <button
-                      type="button"
+                    <a
+                      href={`#/activity?req=${encodeURIComponent(r.request_id)}`}
                       className="customer-name-link"
-                      onClick={() => setSelectedId((prev) => (prev === r.request_id ? null : r.request_id))}
-                      title={`View transaction details for ${r.request_id}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onOpen?.(r.request_id);
+                      }}
+                      title={`View audit trail & transaction details for ${r.request_id}`}
                     >
                       {getCustomerName(r)}
-                    </button>
-                    <span className="mono small muted">{r.agent_id ?? 'agent'}</span>
+                    </a>
                     <span className="small muted">{ago(r.created_at)}</span>
                   </div>
                   <div className="pending-item-amount num">
@@ -214,17 +206,6 @@ export function StudioDashboard() {
           )}
         </section>
       </div>
-
-      {/* Transaction Information rendered under the request section */}
-      {selectedRequest && (
-        <section className="dash-details-section" aria-label="Transaction Details">
-          <TransactionInformation
-            request={selectedRequest}
-            events={auditEvents}
-            onClose={() => setSelectedId(null)}
-          />
-        </section>
-      )}
     </div>
   );
 }

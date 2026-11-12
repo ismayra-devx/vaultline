@@ -67,7 +67,6 @@ export function ApprovalCard({ r, compact = false }: { r: RefundRequest; compact
       <header className="approval-head">
         <div>
           <div className="amount">{money(r.amount, r.currency)}</div>
-          <div className="muted mono small">{r.request_id}</div>
         </div>
         <div className="approval-meta">
           <Badge tone={actionable ? 'warn' : STATUS_TONE(String(r.status))}>{pending && expired ? 'Expired' : statusLabel(String(r.status))}</Badge>
@@ -76,9 +75,8 @@ export function ApprovalCard({ r, compact = false }: { r: RefundRequest; compact
       </header>
       <dl className="payload">
         <dt>Capture</dt><dd className="mono">{r.capture_id ?? '—'}</dd>
-        <dt>Agent</dt><dd className="mono">{r.agent_id ?? '—'}</dd>
         <dt>Currency</dt><dd>{r.currency}</dd>
-        {!compact && r.agent_reason && (<><dt>Agent's reason</dt><dd>“{r.agent_reason}”</dd></>)}
+        {!compact && r.agent_reason && (<><dt>Reason</dt><dd>“{r.agent_reason}”</dd></>)}
         {r.paypal_refund_id && (<><dt>PayPal refund</dt><dd className="mono">{r.paypal_refund_id}</dd></>)}
         <dt>Expires</dt>
         <dd>
@@ -93,12 +91,12 @@ export function ApprovalCard({ r, compact = false }: { r: RefundRequest; compact
         </div>
       )}
       {result && <p className={`result tone-text-${result.tone}`} role="status">{result.text}</p>}
+      <div className="muted mono small" style={{ marginTop: '12px', fontSize: '0.85rem' }}>{r.request_id}</div>
 
       <dialog ref={dialogRef} className="dialog" onClose={() => setConfirming(null)}>
         <h3>{confirming === 'approve' ? 'Authorise this exact refund?' : 'Deny this refund?'}</h3>
         <p>
-          <strong>{money(r.amount, r.currency)}</strong> from capture <span className="mono">{r.capture_id ?? '—'}</span>, requested by{' '}
-          <span className="mono">{r.agent_id ?? 'the agent'}</span>.
+          <strong>{money(r.amount, r.currency)}</strong> from capture <span className="mono">{r.capture_id ?? '—'}</span>.
         </p>
         {confirming === 'approve' && (
           <p className="muted small">Approval is bound to this exact payload and can be used once. Vaultline re-checks it and the current policy right before calling PayPal.</p>

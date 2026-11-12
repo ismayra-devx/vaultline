@@ -30,9 +30,6 @@ export function TransactionInformation({
       <div className="transaction-info-head">
         <div>
           <h3>Transaction Information</h3>
-          <span className="muted small">
-            {getCustomerName(request)} · <span className="req-serif">{request.request_id}</span>
-          </span>
         </div>
         {onClose && (
           <button type="button" className="btn btn-ghost small" onClick={onClose} aria-label="Close transaction info">
@@ -74,21 +71,11 @@ export function TransactionInformation({
           <br />
           <span className="mono">{request.capture_id ?? '—'}</span>
         </div>
-        <div>
-          <span className="muted small">Agent ID</span>
-          <br />
-          <span className="mono">{request.agent_id ?? '—'}</span>
-        </div>
-        <div>
-          <span className="muted small">Adapter calls</span>
-          <br />
-          <strong>{request.adapter_call_count}</strong>
-        </div>
       </div>
 
       {request.agent_reason && (
         <p className="small muted transaction-meta-note">
-          <strong>Agent reason:</strong> &ldquo;{request.agent_reason}&rdquo;
+          <strong>Reason:</strong> &ldquo;{request.agent_reason}&rdquo;
         </p>
       )}
 

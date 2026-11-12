@@ -21,6 +21,18 @@ from backend.auth import hash_password, hash_agent_key, verify_password
 
 
 # ---------------------------------------------------------------------------
+# Synthetic Test Credential Fixtures
+# Non-sensitive, fabricated fixtures used solely for automated unit testing
+# of password policy enforcement, migration rollback, and identity protection.
+# These cannot authenticate against real services and are never used in production.
+# ---------------------------------------------------------------------------
+TEST_FIXTURE_VALID_PASSWORD = "test_fixture_valid_strong_password_nonsecret_1!"
+TEST_FIXTURE_DEV_PASSWORD = "test_fixture_dev_strong_password_nonsecret_2!"
+TEST_FIXTURE_PROD_PASSWORD = "test_fixture_prod_strong_password_nonsecret_3!"
+TEST_FIXTURE_ENV_PASSWORD = "test_fixture_env_strong_password_nonsecret_4!"
+
+
+# ---------------------------------------------------------------------------
 # 1. Startup & Import-time Fail-closed Validation
 # ---------------------------------------------------------------------------
 
@@ -72,7 +84,7 @@ def test_production_fails_closed_when_agent_key_missing(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "false")
     monkeypatch.setenv("VAULTLINE_JUDGE_USERNAME", "judge_prod_merchant")
-    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", "prod_judge_password_super_secure_123!")
+    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", TEST_FIXTURE_VALID_PASSWORD)
     monkeypatch.delenv("VAULTLINE_AGENT_KEY", raising=False)
     monkeypatch.delenv("VAULTLINE_DEMO_MODE", raising=False)
     monkeypatch.setenv("VAULTLINE_DB_PATH", str(db_file))
@@ -89,7 +101,7 @@ def test_production_fails_closed_when_judge_username_missing_or_blank(monkeypatc
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "false")
     monkeypatch.delenv("VAULTLINE_JUDGE_USERNAME", raising=False)
-    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", "prod_judge_password_super_secure_123!")
+    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", TEST_FIXTURE_VALID_PASSWORD)
     monkeypatch.setenv("VAULTLINE_AGENT_KEY", "prod_agent_secure_key_987654321")
     monkeypatch.delenv("VAULTLINE_DEMO_MODE", raising=False)
     monkeypatch.setenv("VAULTLINE_DB_PATH", str(db_file))
@@ -106,7 +118,7 @@ def test_production_fails_closed_with_insecure_judge_username(monkeypatch, tmp_p
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "false")
     monkeypatch.setenv("VAULTLINE_JUDGE_USERNAME", "admin")
-    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", "prod_judge_password_super_secure_123!")
+    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", TEST_FIXTURE_VALID_PASSWORD)
     monkeypatch.setenv("VAULTLINE_AGENT_KEY", "prod_agent_secure_key_987654321")
     monkeypatch.delenv("VAULTLINE_DEMO_MODE", raising=False)
     monkeypatch.setenv("VAULTLINE_DB_PATH", str(db_file))
@@ -140,7 +152,7 @@ def test_production_fails_closed_with_known_default_agent_key(monkeypatch, tmp_p
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "false")
     monkeypatch.setenv("VAULTLINE_JUDGE_USERNAME", "judge_prod_merchant")
-    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", "prod_judge_password_super_secure_123!")
+    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", TEST_FIXTURE_VALID_PASSWORD)
     monkeypatch.setenv("VAULTLINE_AGENT_KEY", "vl_agent_secret_key_abc123")
     monkeypatch.delenv("VAULTLINE_DEMO_MODE", raising=False)
     monkeypatch.setenv("VAULTLINE_DB_PATH", str(db_file))
@@ -253,7 +265,7 @@ def test_development_mode_without_demo_mode_requires_credentials(monkeypatch, tm
     monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "false")
     monkeypatch.setenv("VAULTLINE_DB_PATH", str(db_file))
     monkeypatch.setenv("VAULTLINE_JUDGE_USERNAME", "judge_dev")
-    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", "strong_judge_dev_password_123!")
+    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", TEST_FIXTURE_DEV_PASSWORD)
     monkeypatch.delenv("VAULTLINE_AGENT_KEY", raising=False)
 
     with pytest.raises(RuntimeError) as exc_info:
@@ -290,7 +302,7 @@ def test_demo_captures_not_seeded_in_production(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "false")
     monkeypatch.setenv("VAULTLINE_JUDGE_USERNAME", "judge_prod_tester")
-    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", "prod_judge_secure_password_999!")
+    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", TEST_FIXTURE_PROD_PASSWORD)
     monkeypatch.setenv("VAULTLINE_AGENT_KEY", "prod_agent_secret_key_8888888888")
     monkeypatch.delenv("VAULTLINE_DEMO_MODE", raising=False)
     monkeypatch.setenv("VAULTLINE_DB_PATH", db_file)
@@ -299,7 +311,7 @@ def test_demo_captures_not_seeded_in_production(monkeypatch, tmp_path):
         db_path=db_file,
         merchant_id="merch_prod_1",
         judge_username="judge_prod_tester",
-        judge_password="prod_judge_secure_password_999!",
+        judge_password=TEST_FIXTURE_PROD_PASSWORD,
         agent_id="agent_prod_1",
         agent_key="prod_agent_secret_key_8888888888",
     )
@@ -783,7 +795,7 @@ def test_app_env_test_or_dev_does_not_enable_demo_mode_or_seed_captures(monkeypa
         monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "false")
         monkeypatch.setenv("VAULTLINE_DB_PATH", db_file)
         monkeypatch.setenv("VAULTLINE_JUDGE_USERNAME", "judge_env_tester")
-        monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", "strong_password_env_12345!")
+        monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", TEST_FIXTURE_ENV_PASSWORD)
         monkeypatch.setenv("VAULTLINE_AGENT_KEY", "strong_agent_key_env_67890!")
 
         app = create_app(adapter=FakePaypalAdapter())

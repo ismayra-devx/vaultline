@@ -31,6 +31,11 @@ class FakeClock:
         self.now += seconds
 
 
+# Clearly documented synthetic mock token fixture used solely for unit test HTTP transport mocking.
+# Not a real credential; cannot authenticate against real PayPal Sandbox or Live APIs.
+TEST_MOCK_SANDBOX_TOKEN = "test_fixture_sandbox_mock_token_unit_test"
+
+
 def _make_config(**overrides) -> PayPalConfig:
     params = {
         "client_id": "test_client_id",
@@ -42,7 +47,7 @@ def _make_config(**overrides) -> PayPalConfig:
 
 
 def _oauth_success_response(
-    access_token: str = "tok_sandbox_12345",
+    access_token: str = TEST_MOCK_SANDBOX_TOKEN,
     expires_in: int = 3600,
     debug_id: str = "dbg_oauth_1",
 ) -> httpx.Response:
@@ -132,7 +137,7 @@ def test_oauth_token_retrieval_basic_auth_and_grant() -> None:
     client = PayPalClient(_make_config(), http_client=http_client)
 
     token = client.get_access_token()
-    assert token == "tok_sandbox_12345"
+    assert token == TEST_MOCK_SANDBOX_TOKEN
     assert len(captured_requests) == 1
 
     req = captured_requests[0]
@@ -255,7 +260,7 @@ def test_create_refund_preserves_request_id_and_formats_decimal_json() -> None:
     assert req.method == "POST"
     assert str(req.url) == "https://api-m.sandbox.paypal.com/v2/payments/captures/CAP_123/refund"
     assert req.headers["PayPal-Request-Id"] == "pp_req_backend_999"
-    assert req.headers["Authorization"] == "Bearer tok_sandbox_12345"
+    assert req.headers["Authorization"] == f"Bearer {TEST_MOCK_SANDBOX_TOKEN}"
 
     body = json.loads(req.content.decode("utf-8"))
     assert body == {
@@ -321,7 +326,7 @@ def test_create_refund_timeout_raises_timeout_error_without_retry() -> None:
 
     assert isinstance(exc_info.value, PayPalTimeoutError)
     assert refund_attempts == 1
-    assert "tok_sandbox_12345" not in str(exc_info.value)
+    assert TEST_MOCK_SANDBOX_TOKEN not in str(exc_info.value)
 
 
 def test_create_refund_network_error_raises_timeout_error_without_retry() -> None:

@@ -104,8 +104,9 @@ def _extract_capture_id(data: Dict[str, Any]) -> Optional[str]:
     """
     Extract capture_id from explicit field or a validated PayPal Sandbox HATEOAS 'up' link.
 
-    Only accepts clean HTTPS URLs targeting ``api-m.sandbox.paypal.com`` with
-    exact path ``/v2/payments/captures/{capture_id}`` and no query/fragment/port.
+    Only accepts clean HTTPS URLs targeting allowed PayPal Sandbox hosts
+    (``api-m.sandbox.paypal.com`` or ``api.sandbox.paypal.com``) with exact path
+    ``/v2/payments/captures/{capture_id}`` and no query/fragment/port.
     """
     explicit_id = data.get("capture_id")
     if isinstance(explicit_id, str) and explicit_id.strip():
@@ -114,6 +115,8 @@ def _extract_capture_id(data: Dict[str, Any]) -> Optional[str]:
     links = data.get("links")
     if not isinstance(links, list):
         return None
+
+    allowed_hosts = {SANDBOX_HOST, "api.sandbox.paypal.com"}
 
     for link in links:
         if not isinstance(link, dict):
@@ -129,9 +132,9 @@ def _extract_capture_id(data: Dict[str, Any]) -> Optional[str]:
 
         if parsed.scheme.lower() != "https":
             continue
-        if parsed.port is not None or parsed.netloc.lower() != SANDBOX_HOST:
+        if parsed.port is not None or parsed.netloc.lower() not in allowed_hosts:
             continue
-        if (parsed.hostname or "").lower() != SANDBOX_HOST:
+        if (parsed.hostname or "").lower() not in allowed_hosts:
             continue
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             continue

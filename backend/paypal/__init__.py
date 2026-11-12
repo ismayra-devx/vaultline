@@ -10,6 +10,7 @@ from backend.paypal.exceptions import (
     PayPalResourceNotFoundError,
     PayPalTimeoutError,
 )
+from backend.paypal.register import register_capture, register_captures_from_env
 
 __all__ = [
     "PayPalAPIError",
@@ -22,4 +23,6 @@ __all__ = [
     "PayPalResourceNotFoundError",
     "PayPalSandboxAdapter",
     "PayPalTimeoutError",
+    "register_capture",
+    "register_captures_from_env",
 ]

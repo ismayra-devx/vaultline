@@ -18,6 +18,7 @@ from backend.config import Config, redact_sensitive_data
 from backend.db import Database
 from backend.adapter_interface import PaypalAdapter
 from backend.fake_adapter import FakePaypalAdapter
+from backend.paypal.register import register_captures_from_env
 from backend.services import VaultlineService
 from backend.routes_agent import router as agent_router
 from backend.routes_merchant import router as merchant_router
@@ -153,17 +154,44 @@ def create_app(
                 ) from exc
         else:
             paypal_adapter = FakePaypalAdapter()
+    else:
+        paypal_adapter = adapter
+
+    # Safeguard: In hosted deployment, enforce that the selected adapter is strictly PayPalSandboxAdapter
+    if deployment == "hosted":
+        try:
+            from backend.paypal.adapter import PayPalSandboxAdapter
+        except ImportError:
+            try:
+                from backend.paypal import PayPalSandboxAdapter
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Hosted deployment requires PayPalSandboxAdapter, but it could not be imported."
+                ) from exc
+        if not isinstance(paypal_adapter, PayPalSandboxAdapter):
+            raise RuntimeError(
+                "In hosted deployment (VAULTLINE_DEPLOYMENT=hosted), the adapter must be "
+                "an instance of PayPalSandboxAdapter. FakePaypalAdapter and other test doubles "
+                "are strictly prohibited in hosted environments."
+            )
 
     # 5. Database initialization and seeding (ONLY RUNS AFTER ALL CHECKS PASS)
     database = db or Database(cfg.db_path)
     database.init_schema()
     database.seed_defaults(cfg, demo_mode=effective_demo_mode)
 
-    # Seed default captures on fake adapter if demo mode is active
+    # Seed default captures on fake adapter if demo mode is active, or register from env
     if hasattr(paypal_adapter, "seed_capture") and effective_demo_mode:
         paypal_adapter.seed_capture("CAP_A", Decimal("300.00"), "USD", "COMPLETED")
         paypal_adapter.seed_capture("CAP_B", Decimal("300.00"), "USD", "COMPLETED")
         paypal_adapter.seed_capture("CAP_C", Decimal("300.00"), "USD", "COMPLETED")
+    else:
+        register_captures_from_env(
+            conn=database.get_connection(),
+            adapter=paypal_adapter,
+            merchant_id=cfg.merchant_id,
+            is_hosted=(deployment == "hosted"),
+        )
 
     vaultline_service = service or VaultlineService(
         db=database,

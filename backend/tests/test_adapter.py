@@ -261,3 +261,130 @@ def test_adapter_lifecycle_close_called():
     assert len(closed) == 1
 
 
+def test_hosted_injected_fake_adapter_rejected(monkeypatch, temp_db_path):
+    """Safeguard: In hosted mode (VAULTLINE_DEPLOYMENT=hosted), an injected FakePaypalAdapter is strictly rejected."""
+    from backend.main import create_app
+    from backend.config import Config
+    monkeypatch.setenv("VAULTLINE_DEPLOYMENT", "hosted")
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "true")
+    cfg = Config(
+        db_path=temp_db_path,
+        merchant_id="merch_hosted_1",
+        judge_username="judge_tester",
+        judge_password="secure_password_12345!",
+        agent_id="agent_hosted_1",
+        agent_key="secure_agent_key_67890!",
+        demo_mode=False,
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        create_app(config=cfg, adapter=FakePaypalAdapter())
+    assert "In hosted deployment (VAULTLINE_DEPLOYMENT=hosted), the adapter must be" in str(exc_info.value)
+    assert "FakePaypalAdapter and other test doubles are strictly prohibited" in str(exc_info.value)
+
+
+def test_hosted_missing_sandbox_credentials_fails(monkeypatch, temp_db_path):
+    """When VAULTLINE_USE_REAL_PAYPAL=true without Sandbox credentials, create_app fails closed."""
+    from backend.main import create_app
+    from backend.config import Config
+    monkeypatch.setenv("VAULTLINE_DEPLOYMENT", "hosted")
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "true")
+    monkeypatch.delenv("PAYPAL_CLIENT_ID", raising=False)
+    monkeypatch.delenv("PAYPAL_CLIENT_SECRET", raising=False)
+    cfg = Config(
+        db_path=temp_db_path,
+        merchant_id="merch_hosted_1",
+        judge_username="judge_tester",
+        judge_password="secure_password_12345!",
+        agent_id="agent_hosted_1",
+        agent_key="secure_agent_key_67890!",
+        demo_mode=False,
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        create_app(config=cfg)
+    assert "PayPalSandboxAdapter.from_env() initialization failed" in str(exc_info.value)
+
+
+def test_hosted_failed_capture_registration_fails_startup(monkeypatch, temp_db_path):
+    """In hosted mode, if required demo capture registration fails, startup fails closed."""
+    from backend.main import create_app
+    from backend.config import Config
+    from backend.paypal.adapter import PayPalSandboxAdapter
+    from backend.paypal.client import PayPalClient, PayPalConfig
+    from backend.adapter_interface import CaptureResult
+
+    monkeypatch.setenv("VAULTLINE_DEPLOYMENT", "hosted")
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "true")
+    monkeypatch.setenv("VAULTLINE_SANDBOX_CAPTURE_IDS", "CAP_FAIL_123")
+    cfg = Config(
+        db_path=temp_db_path,
+        merchant_id="merch_hosted_1",
+        judge_username="judge_tester",
+        judge_password="secure_password_12345!",
+        agent_id="agent_hosted_1",
+        agent_key="secure_agent_key_67890!",
+        demo_mode=False,
+    )
+
+    class FailingSandboxAdapter(PayPalSandboxAdapter):
+        def __init__(self):
+            pcfg = PayPalConfig(client_id="cid", client_secret="csec", base_url="https://api-m.sandbox.paypal.com")
+            super().__init__(client=PayPalClient(pcfg))
+
+        def get_capture(self, capture_id: str) -> CaptureResult:
+            raise RuntimeError(f"Simulated PayPal 404: capture '{capture_id}' not found in sandbox")
+
+    failing_adapter = FailingSandboxAdapter()
+    with pytest.raises(RuntimeError) as exc_info:
+        create_app(config=cfg, adapter=failing_adapter)
+    assert "Hosted deployment failed: required sandbox capture 'CAP_FAIL_123' could not be registered" in str(exc_info.value)
+
+
+def test_hosted_successful_sandbox_adapter_and_capture_registration(monkeypatch, temp_db_path):
+    """In hosted mode, valid PayPalSandboxAdapter and successful capture registration allows startup."""
+    from backend.main import create_app
+    from backend.config import Config
+    from backend.paypal.adapter import PayPalSandboxAdapter
+    from backend.paypal.client import PayPalClient, PayPalConfig
+    from backend.adapter_interface import CaptureResult
+
+    monkeypatch.setenv("VAULTLINE_DEPLOYMENT", "hosted")
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "true")
+    monkeypatch.setenv("VAULTLINE_SANDBOX_CAPTURE_IDS", "CAP_VALID_999")
+    cfg = Config(
+        db_path=temp_db_path,
+        merchant_id="merch_hosted_1",
+        judge_username="judge_tester",
+        judge_password="secure_password_12345!",
+        agent_id="agent_hosted_1",
+        agent_key="secure_agent_key_67890!",
+        demo_mode=False,
+    )
+
+    class WorkingSandboxAdapter(PayPalSandboxAdapter):
+        def __init__(self):
+            pcfg = PayPalConfig(client_id="cid", client_secret="csec", base_url="https://api-m.sandbox.paypal.com")
+            super().__init__(client=PayPalClient(pcfg))
+
+        def get_capture(self, capture_id: str) -> CaptureResult:
+            return CaptureResult(
+                capture_id=capture_id,
+                status="COMPLETED",
+                amount=Decimal("250.00"),
+                currency="USD",
+            )
+
+    working_adapter = WorkingSandboxAdapter()
+    app = create_app(config=cfg, adapter=working_adapter)
+    assert isinstance(app.state.adapter, PayPalSandboxAdapter)
+
+    conn = app.state.db.get_connection()
+    row = conn.execute("SELECT id, status, original_amount FROM captures WHERE id = 'CAP_VALID_999'").fetchone()
+    assert row is not None
+    assert row["id"] == "CAP_VALID_999"
+    assert row["status"] == "COMPLETED"
+    assert row["original_amount"] == "250.00"
+    app.state.db.close()
+
+

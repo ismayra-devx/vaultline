@@ -424,20 +424,33 @@ class Database:
             conn.rollback()
             raise
 
-    def seed_defaults(self, config: Config, demo_mode: Optional[bool] = None) -> None:
+    def seed_defaults(
+        self,
+        config: Config,
+        is_production: Optional[bool] = None,
+        is_real_paypal: Optional[bool] = None,
+        demo_mode: Optional[bool] = None,
+    ) -> None:
         """Coordinating entrypoint preserving backwards-compatibility with test fixtures."""
         import os
+        if is_production is None:
+            is_production = os.getenv("APP_ENV", "").strip().lower() in ("production", "prod")
+        if is_real_paypal is None:
+            is_real_paypal = os.getenv("VAULTLINE_USE_REAL_PAYPAL", "").strip().lower() in ("true", "1", "yes")
         if demo_mode is None:
             is_demo = (
                 config.demo_mode
                 or os.getenv("VAULTLINE_DEMO_MODE", "").strip().lower() in ("true", "1", "yes")
             )
-            is_real = os.getenv("VAULTLINE_USE_REAL_PAYPAL", "").strip().lower() in ("true", "1", "yes")
-            is_prod = os.getenv("APP_ENV", "").strip().lower() in ("production", "prod")
-            demo_mode = is_demo and not is_real and not is_prod
+            demo_mode = is_demo and not is_real_paypal and not is_production
 
         self.seed_system_defaults(config)
-        self.seed_credentials(config, is_demo_mode=demo_mode)
+        self.seed_credentials(
+            config,
+            is_production=is_production,
+            is_real_paypal=is_real_paypal,
+            is_demo_mode=demo_mode,
+        )
         if demo_mode:
             self.seed_demo_captures(config.merchant_id)
 

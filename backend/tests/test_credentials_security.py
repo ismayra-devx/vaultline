@@ -793,3 +793,96 @@ def test_app_env_test_or_dev_does_not_enable_demo_mode_or_seed_captures(monkeypa
         captures = conn.execute("SELECT id FROM captures").fetchall()
         assert len(captures) == 0, f"Demo captures must not be seeded under APP_ENV={env_name} without VAULTLINE_DEMO_MODE=true"
         app.state.db.close()
+
+
+def test_production_startup_fails_if_unrelated_merchant_user_retains_known_default_password(monkeypatch, tmp_path):
+    """Production startup must fail closed if any existing merchant user retains a known insecure default password."""
+    db_file = str(tmp_path / "prod_insecure_user.db")
+    db = Database(db_file)
+    db.init_schema()
+
+    conn = db.get_connection()
+    now_iso = "2026-11-12T00:00:00Z"
+    # Seed an unrelated merchant and an unrelated merchant user with a known insecure default password
+    conn.execute("INSERT INTO merchants (id, name, created_at) VALUES ('merch_unrelated', 'Other Corp', ?)", (now_iso,))
+    insecure_pwd_hash = hash_password(DEFAULT_DEMO_JUDGE_PASSWORD)
+    conn.execute(
+        """
+        INSERT INTO merchant_users (id, merchant_id, username, password_hash, role, created_at)
+        VALUES ('user_unrelated_admin', 'merch_unrelated', 'other_admin', ?, 'admin', ?)
+        """,
+        (insecure_pwd_hash, now_iso),
+    )
+    conn.commit()
+    db.close()
+
+    # Now attempt production startup via create_app with clean, strong primary credentials
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "false")
+    monkeypatch.delenv("VAULTLINE_DEMO_MODE", raising=False)
+    monkeypatch.setenv("VAULTLINE_DB_PATH", db_file)
+    monkeypatch.setenv("VAULTLINE_JUDGE_USERNAME", "judge_prod_primary")
+    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", "strong_primary_judge_pass_99999!")
+    monkeypatch.setenv("VAULTLINE_AGENT_KEY", "strong_primary_agent_key_99999!")
+
+    cfg = Config(
+        db_path=db_file,
+        merchant_id="merch_prod_primary",
+        judge_username="judge_prod_primary",
+        judge_password="strong_primary_judge_pass_99999!",
+        agent_id="agent_prod_primary",
+        agent_key="strong_primary_agent_key_99999!",
+        demo_mode=False,
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        create_app(config=cfg, adapter=FakePaypalAdapter())
+    assert "Security initialization failed: Merchant user 'other_admin' retains a known default password." in str(exc_info.value)
+
+
+def test_production_startup_preserves_custom_unrelated_merchant_user(monkeypatch, tmp_path):
+    """Production startup must succeed and leave unrelated custom merchant accounts completely untouched."""
+    db_file = str(tmp_path / "prod_secure_custom_user.db")
+    db = Database(db_file)
+    db.init_schema()
+
+    conn = db.get_connection()
+    now_iso = "2026-11-12T00:00:00Z"
+    conn.execute("INSERT INTO merchants (id, name, created_at) VALUES ('merch_unrelated', 'Other Corp', ?)", (now_iso,))
+    custom_pwd_hash = hash_password("unique_strong_custom_password_xyz987!")
+    conn.execute(
+        """
+        INSERT INTO merchant_users (id, merchant_id, username, password_hash, role, created_at)
+        VALUES ('user_unrelated_custom', 'merch_unrelated', 'custom_user_1', ?, 'admin', ?)
+        """,
+        (custom_pwd_hash, now_iso),
+    )
+    conn.commit()
+    db.close()
+
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("VAULTLINE_USE_REAL_PAYPAL", "false")
+    monkeypatch.delenv("VAULTLINE_DEMO_MODE", raising=False)
+    monkeypatch.setenv("VAULTLINE_DB_PATH", db_file)
+    monkeypatch.setenv("VAULTLINE_JUDGE_USERNAME", "judge_prod_primary")
+    monkeypatch.setenv("VAULTLINE_JUDGE_PASSWORD", "strong_primary_judge_pass_99999!")
+    monkeypatch.setenv("VAULTLINE_AGENT_KEY", "strong_primary_agent_key_99999!")
+
+    cfg = Config(
+        db_path=db_file,
+        merchant_id="merch_prod_primary",
+        judge_username="judge_prod_primary",
+        judge_password="strong_primary_judge_pass_99999!",
+        agent_id="agent_prod_primary",
+        agent_key="strong_primary_agent_key_99999!",
+        demo_mode=False,
+    )
+
+    app = create_app(config=cfg, adapter=FakePaypalAdapter())
+    conn = app.state.db.get_connection()
+    user_row = conn.execute("SELECT id, username, password_hash, role FROM merchant_users WHERE id = 'user_unrelated_custom'").fetchone()
+    assert user_row is not None
+    assert user_row["username"] == "custom_user_1"
+    assert user_row["password_hash"] == custom_pwd_hash
+    assert user_row["role"] == "admin"
+    app.state.db.close()

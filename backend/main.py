@@ -178,7 +178,12 @@ def create_app(
     # 5. Database initialization and seeding (ONLY RUNS AFTER ALL CHECKS PASS)
     database = db or Database(cfg.db_path)
     database.init_schema()
-    database.seed_defaults(cfg, demo_mode=effective_demo_mode)
+    database.seed_defaults(
+        cfg,
+        is_production=is_production,
+        is_real_paypal=is_real_paypal,
+        demo_mode=effective_demo_mode,
+    )
 
     # Seed default captures on fake adapter if demo mode is active, or register from env
     if hasattr(paypal_adapter, "seed_capture") and effective_demo_mode:

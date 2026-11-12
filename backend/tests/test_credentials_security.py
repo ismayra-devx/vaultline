@@ -886,3 +886,54 @@ def test_production_startup_preserves_custom_unrelated_merchant_user(monkeypatch
     assert user_row["password_hash"] == custom_pwd_hash
     assert user_row["role"] == "admin"
     app.state.db.close()
+
+
+def test_seed_defaults_legacy_positional_demo_mode_call_populates_captures(tmp_path):
+    """Regression test: seed_defaults(config, True) positional call must set demo_mode=True and seed captures."""
+    db_file = str(tmp_path / "legacy_positional_true.db")
+    db = Database(db_file)
+    db.init_schema()
+
+    cfg = Config(
+        db_path=db_file,
+        merchant_id="merch_pos_test",
+        judge_username="judge_pos_test",
+        judge_password="secure_pos_password_12345!",
+        agent_id="agent_pos_test",
+        agent_key="secure_pos_agent_key_67890!",
+        demo_mode=False,
+    )
+
+    # Legacy positional call: 2nd argument is demo_mode=True
+    db.seed_defaults(cfg, True)
+
+    conn = db.get_connection()
+    captures = conn.execute("SELECT id FROM captures ORDER BY id").fetchall()
+    capture_ids = [c["id"] for c in captures]
+    assert capture_ids == ["CAP_A", "CAP_B", "CAP_C"]
+    db.close()
+
+
+def test_seed_defaults_legacy_positional_demo_mode_false_skips_captures(tmp_path):
+    """Regression test: seed_defaults(config, False) positional call must keep demo_mode=False and skip captures."""
+    db_file = str(tmp_path / "legacy_positional_false.db")
+    db = Database(db_file)
+    db.init_schema()
+
+    cfg = Config(
+        db_path=db_file,
+        merchant_id="merch_pos_test",
+        judge_username="judge_pos_test",
+        judge_password="secure_pos_password_12345!",
+        agent_id="agent_pos_test",
+        agent_key="secure_pos_agent_key_67890!",
+        demo_mode=True,
+    )
+
+    # Legacy positional call: 2nd argument is demo_mode=False
+    db.seed_defaults(cfg, False)
+
+    conn = db.get_connection()
+    captures = conn.execute("SELECT id FROM captures").fetchall()
+    assert len(captures) == 0
+    db.close()

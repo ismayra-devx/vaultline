@@ -427,11 +427,16 @@ class Database:
     def seed_defaults(
         self,
         config: Config,
+        demo_mode: Optional[bool] = None,
+        *,
         is_production: Optional[bool] = None,
         is_real_paypal: Optional[bool] = None,
-        demo_mode: Optional[bool] = None,
     ) -> None:
-        """Coordinating entrypoint preserving backwards-compatibility with test fixtures."""
+        """Coordinating entrypoint preserving backwards-compatibility with test fixtures.
+
+        Preserves legacy positional signature: `seed_defaults(config, demo_mode)`.
+        Keyword arguments `is_production` and `is_real_paypal` allow explicit deployment checks.
+        """
         import os
         if is_production is None:
             is_production = os.getenv("APP_ENV", "").strip().lower() in ("production", "prod")

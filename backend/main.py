@@ -180,9 +180,9 @@ def create_app(
     database.init_schema()
     database.seed_defaults(
         cfg,
+        demo_mode=effective_demo_mode,
         is_production=is_production,
         is_real_paypal=is_real_paypal,
-        demo_mode=effective_demo_mode,
     )
 
     # Seed default captures on fake adapter if demo mode is active, or register from env

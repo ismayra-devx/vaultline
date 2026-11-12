@@ -168,6 +168,12 @@ export function ActivityPage({ focus }: { focus: string | null }) {
 
   return (
     <section>
+      <div className={`chain ${a.is_valid ? 'ok' : 'bad'}`} role="status">
+        <strong>Audit hash chain: {a.is_valid ? 'verified intact' : 'BROKEN'}</strong>
+        <span className="muted small">
+          {' '}· {a.total_events} events ({a.message}) · SHA-256 chain, tamper-evident · checked {time(audit.updatedAt ? new Date(audit.updatedAt).toISOString() : null)}
+        </span>
+      </div>
       {ids.length === 0 ? (
         <Empty title="No audit events yet" />
       ) : (
@@ -175,7 +181,7 @@ export function ActivityPage({ focus }: { focus: string | null }) {
           <nav className="side-list" aria-label="Requests">
             {ids.slice().reverse().map((id) => {
               const r = requests.data?.find((x) => x.request_id === id);
-              const custName = r ? getCustomerName(r) : `Customer ${id}`;
+              const custName = r ? getCustomerName(r) : `Customer (${id})`;
               return (
                 <button
                   key={id}

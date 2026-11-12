@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useData } from '../lib/data';
 import { ago, getCustomerName, money } from '../lib/format';
-import { Empty, Loading } from '../components/ui';
+import { Empty, Loading, DecisionBadge } from '../components/ui';
 import { TransactionInformation } from '../components/TransactionInformation';
 
 export function StudioDashboard() {
@@ -36,8 +36,10 @@ export function StudioDashboard() {
   });
   const totalTransactionsMonth = thisMonthRequests.length;
   const totalAmountMonth = thisMonthRequests.reduce((sum, r) => sum + parseFloat(r.amount || '0'), 0);
-  const MONTHLY_LIMIT = 1000;
-  const amountRemaining = Math.max(0, MONTHLY_LIMIT - totalAmountMonth);
+  // Backend dependency: Vaultline policy engine currently enforces per-transaction thresholds ($10.00 auto / $25.00 escalation).
+  // No monthly limit is defined in the policy schema or exposed by the backend API.
+  const backendMonthlyLimit = null as number | null;
+  const amountRemaining = backendMonthlyLimit !== null ? Math.max(0, backendMonthlyLimit - totalAmountMonth) : null;
 
   // Row 3: Recent requests (sorted by created_at DESC)
   const recentRequests = [...allRequests]
@@ -102,8 +104,22 @@ export function StudioDashboard() {
         </div>
         <div className="dash-strip-divider" aria-hidden />
         <div className="dash-strip-item">
-          <span className="dash-strip-label">AMOUNT REMAINING (MONTHLY LIMIT {money(MONTHLY_LIMIT.toFixed(2))})</span>
-          <span className="dash-strip-value">{money(amountRemaining.toFixed(2))}</span>
+          <span className="dash-strip-label">
+            {backendMonthlyLimit !== null
+              ? `AMOUNT REMAINING (MONTHLY LIMIT ${money(backendMonthlyLimit.toFixed(2))})`
+              : 'MONTHLY POLICY LIMIT'}
+          </span>
+          <span
+            className="dash-strip-value"
+            style={backendMonthlyLimit === null ? { fontSize: '15px', color: 'var(--muted)' } : undefined}
+            title={
+              backendMonthlyLimit === null
+                ? 'Backend dependency: Policy engine enforces per-transaction thresholds ($10.00 auto / $25.00 escalation); no monthly cap is exposed by the API.'
+                : undefined
+            }
+          >
+            {backendMonthlyLimit !== null ? money(amountRemaining!.toFixed(2)) : 'Not configured (Backend dependency)'}
+          </span>
         </div>
       </div>
 
@@ -148,7 +164,7 @@ export function StudioDashboard() {
                       </td>
                       <td className="mono small">{r.agent_id ?? '—'}</td>
                       <td className="num">{money(r.amount, r.currency)}</td>
-                      <td>{r.decision}</td>
+                      <td><DecisionBadge d={r.decision} /></td>
                     </tr>
                   ))}
                 </tbody>

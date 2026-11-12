@@ -371,24 +371,47 @@ textarea {
 }
 
 /* ---------- Badges & tones ---------- */
-/* Statuses (Approved/Escalated/Blocked, ALLOW/ESCALATE/BLOCK) = plain body-colour text.
-   No pill, background, tint, dot or status colour. One CSS rule, not per-component edits. */
-.badge,
-.badge[class*="tone-"],
-.badge::before {
-  display: inline !important;
-  background: transparent !important;
-  color: inherit !important;
-  padding: 0 !important;
-  border-radius: 0 !important;
-  border: none !important;
-  font-weight: inherit !important;
-  font-size: inherit !important;
-  box-shadow: none !important;
+/* Cleaner text-based appearance without background pills, while preserving distinguishable,
+   WCAG AA accessible status colors (contrast >= 4.5:1 on background). */
+.badge {
+  display: inline-block;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  font-weight: 600;
+  font-size: inherit;
+  box-shadow: none;
+  white-space: nowrap;
 }
 .badge::before {
   display: none !important;
   content: none !important;
+}
+.badge.tone-ok,
+.tone-ok {
+  color: var(--ok);
+  background: transparent;
+}
+.badge.tone-bad,
+.tone-bad {
+  color: var(--bad);
+  background: transparent;
+}
+.badge.tone-warn,
+.tone-warn {
+  color: var(--warn);
+  background: transparent;
+}
+.badge.tone-info,
+.tone-info {
+  color: var(--info);
+  background: transparent;
+}
+.badge.tone-muted,
+.tone-muted {
+  color: var(--muted);
+  background: transparent;
 }
 .tone-text-ok {
   color: var(--ok);
